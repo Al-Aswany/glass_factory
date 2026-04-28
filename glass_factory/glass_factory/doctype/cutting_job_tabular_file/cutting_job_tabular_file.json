@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "creation": "2026-04-28 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "attached_file",
+  "sheet_index"
+ ],
+ "fields": [
+  {
+   "fieldname": "attached_file",
+   "fieldtype": "Attach",
+   "in_list_view": 1,
+   "label": "Attached File",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sheet_index",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Sheet Index",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "modified": "2026-04-28 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Cutting Job Tabular File",
+ "owner": "Administrator",
+ "sort_order": 50,
+ "track_changes": 1,
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ]
+}

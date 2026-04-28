@@ -1,0 +1,199 @@
+{
+ "actions": [],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "write": 1
+  }
+ ],
+ "creation": "2026-04-28 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "column_break_1",
+  "linked_sales_orders",
+  "section_break_2",
+  "pieces",
+  "section_break_3",
+  "source_sheets",
+  "section_break_4",
+  "attached_pieces",
+  "attached_stock_pre",
+  "attached_stock_post",
+  "tabular_files",
+  "section_break_5",
+  "result_summary",
+  "column_break_6",
+  "utilization_pct",
+  "total_waste_m2",
+  "sheets_consumed",
+  "pieces_produced",
+  "remnants_created",
+  "section_break_7",
+  "linked_stock_entry",
+  "linked_delivery_notes",
+  "section_break_8",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nFiles Generated\nAwaiting Optimization\nResult Uploaded\nCompleted",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "linked_sales_orders",
+   "fieldtype": "Table",
+   "label": "Linked Sales Orders",
+   "options": "Cutting Job Linked SO"
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Pieces & Source"
+  },
+  {
+   "fieldname": "pieces",
+   "fieldtype": "Table",
+   "label": "Pieces (Cutting Job Piece)",
+   "options": "Cutting Job Piece"
+  },
+  {
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break",
+   "label": "Source Sheets"
+  },
+  {
+   "fieldname": "source_sheets",
+   "fieldtype": "Table",
+   "label": "Source Sheets (Cutting Job Source Sheet)",
+   "options": "Cutting Job Source Sheet"
+  },
+  {
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break",
+   "label": "Attachments"
+  },
+  {
+   "fieldname": "attached_pieces",
+   "fieldtype": "Attach",
+   "label": "Pieces File (pieces.xlsx)"
+  },
+  {
+   "fieldname": "attached_stock_pre",
+   "fieldtype": "Attach",
+   "label": "Stock Pre File (stock_pre.xlsx)"
+  },
+  {
+   "fieldname": "attached_stock_post",
+   "fieldtype": "Attach",
+   "label": "Stock Post File (stock_post.xlsx)"
+  },
+  {
+   "fieldname": "tabular_files",
+   "fieldtype": "Table",
+   "label": "Tabular Files (Cutting Job Tabular File)",
+   "options": "Cutting Job Tabular File"
+  },
+  {
+   "fieldname": "section_break_5",
+   "fieldtype": "Section Break",
+   "label": "Result Summary"
+  },
+  {
+   "fieldname": "result_summary",
+   "fieldtype": "Text Editor",
+   "label": "Result Summary"
+  },
+  {
+   "fieldname": "column_break_6",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "utilization_pct",
+   "fieldtype": "Float",
+   "label": "Utilization %",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_waste_m2",
+   "fieldtype": "Float",
+   "label": "Total Waste (m²)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sheets_consumed",
+   "fieldtype": "Int",
+   "label": "Sheets Consumed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pieces_produced",
+   "fieldtype": "Int",
+   "label": "Pieces Produced",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remnants_created",
+   "fieldtype": "Int",
+   "label": "Remnants Created",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_7",
+   "fieldtype": "Section Break",
+   "label": "Linked Documents"
+  },
+  {
+   "fieldname": "linked_stock_entry",
+   "fieldtype": "Link",
+   "label": "Linked Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "linked_delivery_notes",
+   "fieldtype": "Text",
+   "label": "Linked Delivery Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_8",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Text Editor",
+   "label": "Remarks"
+  }
+ ],
+ "is_submittable": 1,
+ "modified": "2026-04-28 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Cutting Job",
+ "owner": "Administrator",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

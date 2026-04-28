@@ -1,0 +1,168 @@
+{
+ "actions": [],
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "creation": "2026-04-28 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_1",
+  "min_remnant_area_m2",
+  "min_remnant_side_mm",
+  "min_chargeable_area_m2",
+  "default_kerf_mm",
+  "section_break_2",
+  "cut_piece_item_naming_pattern",
+  "remnant_item_naming_pattern",
+  "scrap_item_code",
+  "scrap_item_per_spec",
+  "section_break_3",
+  "raw_warehouse",
+  "cut_pieces_warehouse",
+  "remnants_warehouse",
+  "scrap_warehouse",
+  "section_break_4",
+  "edge_polish_rate",
+  "bevel_rate",
+  "hole_drill_rate",
+  "cost_allocation_method"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Remnant Settings"
+  },
+  {
+   "default": "0.1",
+   "fieldname": "min_remnant_area_m2",
+   "fieldtype": "Float",
+   "label": "Min Remnant Area (m²)"
+  },
+  {
+   "default": "100",
+   "fieldname": "min_remnant_side_mm",
+   "fieldtype": "Int",
+   "label": "Min Remnant Side (mm)"
+  },
+  {
+   "default": "0.05",
+   "fieldname": "min_chargeable_area_m2",
+   "fieldtype": "Float",
+   "label": "Min Chargeable Area (m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "default_kerf_mm",
+   "fieldtype": "Float",
+   "label": "Default Kerf (mm)"
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Naming Patterns"
+  },
+  {
+   "default": "{parent_item_code}-CUT-{length}x{width}",
+   "fieldname": "cut_piece_item_naming_pattern",
+   "fieldtype": "Data",
+   "label": "Cut Piece Item Naming Pattern"
+  },
+  {
+   "default": "{parent_item_code}-REM-{length}x{width}",
+   "fieldname": "remnant_item_naming_pattern",
+   "fieldtype": "Data",
+   "label": "Remnant Item Naming Pattern"
+  },
+  {
+   "fieldname": "scrap_item_code",
+   "fieldtype": "Link",
+   "label": "Scrap Item Code",
+   "options": "Item"
+  },
+  {
+   "default": "0",
+   "fieldname": "scrap_item_per_spec",
+   "fieldtype": "Check",
+   "label": "One Scrap Item Per Spec"
+  },
+  {
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break",
+   "label": "Warehouses"
+  },
+  {
+   "fieldname": "raw_warehouse",
+   "fieldtype": "Link",
+   "label": "Raw Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "cut_pieces_warehouse",
+   "fieldtype": "Link",
+   "label": "Cut Pieces Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "remnants_warehouse",
+   "fieldtype": "Link",
+   "label": "Remnants Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "scrap_warehouse",
+   "fieldtype": "Link",
+   "label": "Scrap Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "default": "0",
+   "fieldname": "edge_polish_rate",
+   "fieldtype": "Currency",
+   "label": "Edge Polish Rate (per meter)"
+  },
+  {
+   "default": "0",
+   "fieldname": "bevel_rate",
+   "fieldtype": "Currency",
+   "label": "Bevel Rate"
+  },
+  {
+   "default": "0",
+   "fieldname": "hole_drill_rate",
+   "fieldtype": "Currency",
+   "label": "Hole Drill Rate (each)"
+  },
+  {
+   "default": "area_proportional",
+   "fieldname": "cost_allocation_method",
+   "fieldtype": "Select",
+   "label": "Cost Allocation Method",
+   "options": "area_proportional\nzero_remnant"
+  }
+ ],
+ "issingle": 1,
+ "modified": "2026-04-28 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Glass Cutting Settings",
+ "owner": "Administrator",
+ "sort_order": 50,
+ "track_changes": 1
+}

@@ -5,6 +5,8 @@ app_description = "app for Glass Factory"
 app_email = "mahmudhussain2001ab@gmail.com"
 app_license = "mit"
 
+fixtures = []
+
 # Apps
 # ------------------
 
@@ -85,8 +87,7 @@ app_license = "mit"
 # Installation
 # ------------
 
-# before_install = "glass_factory.install.before_install"
-# after_install = "glass_factory.install.after_install"
+after_install = "glass_factory.install.after_install"
 
 # Uninstallation
 # ------------
@@ -138,13 +139,18 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Quotation": {
+		"before_save": "glass_factory.quotation_hooks.compute_cut_pieces",
+	},
+	"Sales Order": {
+		"before_insert": "glass_factory.quotation_hooks.copy_cut_pieces_to_so",
+		"before_save": "glass_factory.quotation_hooks.compute_cut_pieces",
+	},
+	"Serial No": {
+		"before_save": "glass_factory.glass_factory.serial_no_hooks.compute_area",
+	},
+}
 
 # Scheduled Tasks
 # ---------------

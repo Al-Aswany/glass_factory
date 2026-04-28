@@ -1,0 +1,201 @@
+# Full data flow: ERPNext × Cutting Optimization Pro for the glass factory
+
+## 1. Master data setup (one-time)
+
+**Glass Cutting Settings (Single DocType)** — the configuration knob:
+- `min_remnant_area_m2`, `min_remnant_side_mm` — both must be met or it's scrap
+- `default_kerf_mm` — typically 0 for glass
+- `cut_piece_item_naming_pattern` — default `{parent_item_code}-CUT-{length}x{width}`
+- `remnant_item_naming_pattern` — default `{parent_item_code}-REM-{length}x{width}`
+- `raw_warehouse`, `cut_pieces_warehouse`, `remnants_warehouse`, `scrap_warehouse`
+- `scrap_item_per_spec` (boolean) — one global scrap Item or per-glass-spec
+- `cost_allocation_method` — `area_proportional` (default) or `zero_remnant`
+
+**Glass Item structure** — one Item per spec, e.g., `GLS-CLR-6MM`:
+- UOM = Square Meter, serialized, has Item Group "Glass Sheets"
+- Custom fields on the Item: `glass_type` (Float/Tempered/Laminated/Low-E), `thickness_mm`, `color_tint`, `coating`
+- Custom fields on Serial No: `length_mm`, `width_mm`, `area_m2` (computed), `cutting_job` (Link to the job that produced it, blank for purchased sheets), `source_purchase_receipt`
+
+The cut-piece and remnant Items are **auto-created on demand** by the parser using the naming pattern. A 1200×800 remnant of `GLS-CLR-6MM` becomes Item `GLS-CLR-6MM-REM-1200x800`. If the same dimension comes out of next week's job, the existing Item is reused — quantity goes to 2, not a new Item.
+
+**Edge work as service Items** — `EDGE-POLISH` (UOM=Linear Meter), `EDGE-BEVEL`, `HOLE-DRILL` (UOM=Each), `CORNER-CUTOUT`. These are non-stock, sold as services, used in pricing only.
+
+## 2. Quoting
+
+Customer asks for cuts. Sales person creates a **Quotation** with a custom child table `cut_pieces`:
+
+| parent_item | length_mm | width_mm | qty | polish_top | polish_bottom | polish_left | polish_right | bevel | holes | rate_override |
+|---|---|---|---|---|---|---|---|---|---|---|
+
+A server-side `before_save` hook computes the line total for each row:
+
+```
+piece_area_m2 = max(length × width / 1e6, min_chargeable_area_m2)
+material_cost = piece_area_m2 × material_rate_per_m2
+edge_meters   = sum of polished sides in linear meters
+edge_cost     = edge_meters × edge_polish_rate + holes × hole_rate + ...
+line_total    = (material_cost + edge_cost) × qty + setup_fee
+```
+
+The standard `Quotation Item` table is auto-populated from `cut_pieces` so accounting/tax/discount logic works natively. Submit → standard ERPNext flow → Sales Order on acceptance, with `cut_pieces` carried over.
+
+## 3. Cutting Job creation
+
+Production planner creates **Cutting Job** (custom DocType, submittable):
+
+```
+Cutting Job
+├── status (Draft → Files Generated → Awaiting Optimization → Result Uploaded → Completed)
+├── source_warehouse, remnants_warehouse, cut_pieces_warehouse, scrap_warehouse
+├── linked_sales_orders (Table MultiSelect — one job can serve N customers)
+├── pieces (Child: Cutting Job Piece) — auto-pulled from linked SOs
+│   └── parent_item, length_mm, width_mm, qty, label, customer_name, sales_order, sales_order_item
+├── source_sheets (Child: Cutting Job Source Sheet)
+│   └── item_code, serial_no, length_mm, width_mm  (operator selects from in-stock)
+├── attachments: stock_pre.xlsx, pieces.xlsx, stock_post.xlsx, tabular_sheet_*.xlsx
+├── result_summary: utilization_pct, total_waste_m2, sheets_consumed, pieces_produced, remnants_created
+└── linked_stock_entry, linked_delivery_notes
+```
+
+**"Generate COP Files" button** writes two attachments:
+
+`PIECES.xlsx` (one row per (piece_dimensions, customer)):
+
+```
+# | Length | Width | Quantity | Material   | Texture | Label                      | Customer name
+1 | 1200   | 800   | 5        | GLS-CLR-6MM| 2       | door | SO-2026-0042-3      | Acme Builders
+2 | 600    | 400   | 3        | GLS-CLR-6MM| 2       | shelf | SO-2026-0042-4     | Acme Builders
+```
+
+`Material` = parent Item code (this becomes the join key). `Texture=2` always for glass (free rotation, no grain). `Label` carries the SO reference back through the round-trip — format `{user_label} | {sales_order}-{idx}` where `idx` is the row position in `pieces`.
+
+`STOCK_pre.xlsx` — aggregated by dimensions:
+
+```
+# | Length | Width | Quantity | Material   | Texture | Label       | Price
+1 | 3000   | 2000  | 8        | GLS-CLR-6MM| 2       | GLS-CLR-6MM | 0
+2 | 1780   | 980   | 2        | GLS-CLR-6MM| 2       | GLS-CLR-6MM-REM-1780x980 | 0
+```
+
+We do **not** encode serial numbers per row — it's impossible when one row represents N identical sheets. Instead we rely on FIFO consumption at parse time. `Label` carries the Item code so we can match cut pieces to the right parent in case a single PIECES file requests cuts from multiple specs.
+
+Job goes to status **Awaiting Optimization**.
+
+## 4. COP run (manual, on Windows)
+
+Operator downloads the two files, opens in COP, runs Start, hits Accept. Then saves three things back:
+
+1. `STOCK_post.xlsx` — same path/name, mutated: consumed quantities decreased, remnants appearing as new rows
+2. `tabular_sheet_1.xlsx`, `tabular_sheet_2.xlsx`, ... — one per sheet, since you confirmed Tabular saves only the active sheet. The operator clicks #1, saves, clicks #2, saves, etc.
+3. (Optional) PNG/PDF print of the layout for the floor cutter
+
+All uploaded to the Cutting Job. Status → **Result Uploaded**.
+
+## 5. Parsing — the diff algorithm
+
+**Click "Process Result"** triggers a server method. Three parsers run in sequence:
+
+**Parser A — Stock diff** (drives consumption + remnants):
+
+```python
+pre  = aggregate(stock_pre)   # {(material, length, width): qty}
+post = aggregate(stock_post)
+all_keys = pre.keys() | post.keys()
+
+consumed = []   # (material, length, width, qty_consumed)
+remnants = []   # (material, length, width, qty_added)
+
+for key in all_keys:
+    delta = post.get(key, 0) - pre.get(key, 0)
+    if delta < 0:
+        consumed.append((*key, -delta))
+    elif delta > 0:
+        remnants.append((*key, delta))
+```
+
+Note: `delta > 0` on a key that *already existed in pre* means a remnant came out at the same dimension as something already in stock — the new remnant rows merged into the existing row. We still treat it as a remnant created (just one for which the auto-created Item code already exists).
+
+**Parser B — Tabular files** (drives piece-to-sheet placement):
+
+```python
+sheets = []  # one entry per uploaded tabular file
+for i, file in enumerate(sorted(tabular_files), start=1):
+    pieces = []
+    for row in file:
+        sales_order, idx = parse_label(row.Label)  # "door | SO-...-3" → ("SO-...", 3)
+        pieces.append({
+            "sheet_index": i,
+            "length": row.Length, "width": row.Width,
+            "x": row.Left, "y": row.Top,
+            "rotated": bool(row.Rotated),
+            "sales_order": sales_order, "sales_order_item_idx": idx,
+            "customer": row.CustomerName,
+        })
+    sheets.append({"index": i, "pieces": pieces})
+```
+
+**Parser C — Cross-validation**:
+
+- `len(sheets) == consumed_total_count`? If consumed is 6 jumbo sheets, we need 6 tabular files. Mismatch → raise.
+- `pieces_in_tabular_total == sum(pieces.qty in cutting_job)`? If COP failed to fit some pieces, this drops below requested. Raise warning showing which SO lines are short.
+- `sum(piece_areas) + sum(remnant_areas) ≤ sum(consumed_sheet_areas)`? Geometric sanity. Difference = scrap.
+
+Result presented to the operator on a **confirmation screen**:
+
+> "Will consume 6 sheets of GLS-CLR-6MM from stock (FIFO).
+> Will produce 23 cut pieces (out of 24 requested — Jenny's 1 door at 540×650 did not fit), 4 remnants, and 0.84 m² scrap.
+> Layout: [SVG renders all 6 sheets from tabular coordinates]
+> Confirm and post?"
+
+## 6. Stock posting on confirmation
+
+A single **Stock Entry of type "Manufacture"** is created and submitted programmatically:
+
+**Items consumed**:
+For each `(material, length, width, qty_consumed)` in `consumed`, FIFO-pick `qty_consumed` serials of `material` from `source_warehouse` matching the dimensions on serial. Add as source rows.
+
+**Items produced** — three groups:
+
+1. *Cut pieces* — for each row in tabular files, ensure `{parent}-CUT-{L}x{W}` Item exists (auto-create from template if missing), add a target row with a fresh serial. Serial gets `length_mm`, `width_mm`, `cutting_job` linkage. Warehouse = `cut_pieces_warehouse`.
+
+2. *Remnants* — for each row in `remnants`, ensure `{parent}-REM-{L}x{W}` Item exists, add a target row per unit qty with fresh serial. Warehouse = `remnants_warehouse`. If a remnant's dimensions fail the min-size rule from settings, route to `scrap_warehouse` with the scrap Item instead.
+
+3. *Scrap* — one line for the geometric residual: `Glass Scrap` Item (or per-spec), quantity in m². Warehouse = `scrap_warehouse`. This makes utilization losses visible in financial reports.
+
+**Costing**: ERPNext Manufacture distributes input cost across outputs by their `qty * basic_rate`. Set each output's basic rate to its area in m², and the framework allocates cost area-proportionally across cut pieces, remnants, and scrap. Set scrap's rate to a low number (or zero) if the client wants cut pieces and remnants to absorb full cost.
+
+## 7. Delivery (sales-driven jobs)
+
+For each `Sales Order` linked to the Cutting Job, auto-create a **Delivery Note** draft. DN line items pull cut pieces by their fresh serials from `cut_pieces_warehouse`, mapped from tabular's `sales_order_item_idx`. Sales person reviews, submits, customer collects.
+
+For stock-driven cuts (no SO linkage), cut pieces just sit in `cut_pieces_warehouse` as sellable inventory until a future order.
+
+Cutting Job status → **Completed**, linked Stock Entry and DNs stored on the doc.
+
+## 8. Reports for the demo
+
+Three custom reports paid off by this data model:
+
+- **Layout Visualizer** — page-per-sheet SVG using tabular coordinates, with the cutter's sticker rendered next to each piece. Print-ready for the shop floor.
+- **Remnant Inventory** — list view filtered to `*-REM-*` Items, columns: dimensions, age, parent Cutting Job, current value. Sort by area descending → "what's the biggest piece I can use today."
+- **Cutting Profitability** — per Cutting Job: revenue (linked SO totals) – material cost (Stock Entry valuation) – labor (configurable per m² or per cut) = margin. Includes utilization % from job summary.
+
+## What's deferred past v1
+
+- Per-remnant parent-serial lineage (we link remnants to the Cutting Job, not to a specific consumed serial — fine because intact full sheets are fungible)
+- Live optimizer inside ERPNext (path 1c from earlier — would replace COP eventually, but not for the demo)
+- DXF/shaped cutting (COP can't do shapes anyway)
+- Multi-warehouse picking (assumes one source warehouse per job for now)
+
+## Demo script (15 minutes, in order of impact)
+
+1. Show stock: 8 sheets of `GLS-CLR-6MM` in raw warehouse, each a serial with dimensions on the serial detail page.
+2. Create Quotation with cut_pieces table, watch live pricing populate. Convert to SO.
+3. Create Cutting Job, link the SO, pick 4 source sheets, click Generate COP Files. Two Excel attachments appear.
+4. (Pre-prepared) — switch to a Windows VM, open both files in COP, run optimization, hit Accept, save STOCK + 2 tabulars.
+5. Upload 3 files back to the job, click Process Result. Validation screen pops up with the layout SVG.
+6. Confirm. The Stock Entry, the auto-created remnant Items, and a draft Delivery Note all appear linked.
+7. Open Remnant Inventory report — show the 4 new remnants with parent job link.
+8. Open Cutting Profitability — show margin on this job.
+
+The remnant flow is end-to-end visible from clicking Process Result to seeing new Items in the warehouse, which is the moment that sells the integration.

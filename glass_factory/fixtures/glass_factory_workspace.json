@@ -1,0 +1,77 @@
+[
+ {
+  "doctype": "Workspace",
+  "name": "Glass Factory",
+  "title": "Glass Factory",
+  "label": "Glass Factory",
+  "type": "Workspace",
+  "module": "Glass Factory",
+  "icon": "cutting",
+  "is_hidden": 0,
+  "public": 1,
+  "sequence_id": 1.0,
+  "content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Glass Factory</b></span>\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Cutting\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Inventory\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
+  "links": [
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Cutting Job",
+    "link_count": 0,
+    "link_to": "Cutting Job",
+    "link_type": "DocType",
+    "onboard": 1,
+    "type": "Link",
+    "card_name": "Cutting"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Glass Cut Piece",
+    "link_count": 0,
+    "link_to": "Glass Cut Piece",
+    "link_type": "DocType",
+    "onboard": 0,
+    "type": "Link",
+    "card_name": "Inventory"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 1,
+    "label": "Layout Visualizer",
+    "link_count": 0,
+    "link_to": "Layout Visualizer",
+    "link_type": "Report",
+    "onboard": 0,
+    "type": "Link",
+    "card_name": "Reports"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 1,
+    "label": "Remnant Inventory",
+    "link_count": 0,
+    "link_to": "Remnant Inventory",
+    "link_type": "Report",
+    "onboard": 0,
+    "type": "Link",
+    "card_name": "Reports"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Glass Cutting Settings",
+    "link_count": 0,
+    "link_to": "Glass Cutting Settings",
+    "link_type": "DocType",
+    "onboard": 1,
+    "type": "Link",
+    "card_name": "Settings"
+   }
+  ]
+ }
+]

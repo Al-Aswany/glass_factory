@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "creation": "2026-04-28 01:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "parent_item",
+  "length_mm",
+  "width_mm",
+  "qty",
+  "polish_top",
+  "polish_bottom",
+  "polish_left",
+  "polish_right",
+  "bevel",
+  "holes",
+  "rate_override",
+  "linked_quotation_item",
+  "user_label"
+ ],
+ "fields": [
+  {
+   "fieldname": "parent_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Parent Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "length_mm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Length (mm)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "width_mm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Width (mm)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantity",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "polish_top",
+   "fieldtype": "Check",
+   "label": "Polish Top"
+  },
+  {
+   "default": "0",
+   "fieldname": "polish_bottom",
+   "fieldtype": "Check",
+   "label": "Polish Bottom"
+  },
+  {
+   "default": "0",
+   "fieldname": "polish_left",
+   "fieldtype": "Check",
+   "label": "Polish Left"
+  },
+  {
+   "default": "0",
+   "fieldname": "polish_right",
+   "fieldtype": "Check",
+   "label": "Polish Right"
+  },
+  {
+   "default": "0",
+   "fieldname": "bevel",
+   "fieldtype": "Check",
+   "label": "Bevel"
+  },
+  {
+   "default": "0",
+   "fieldname": "holes",
+   "fieldtype": "Int",
+   "label": "Number of Holes"
+  },
+  {
+   "fieldname": "rate_override",
+   "fieldtype": "Currency",
+   "label": "Rate Override (per m\u00b2)"
+  },
+  {
+   "fieldname": "linked_quotation_item",
+   "fieldtype": "Data",
+   "label": "Linked Quotation Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "user_label",
+   "fieldtype": "Data",
+   "label": "User Label"
+  }
+ ],
+ "istable": 1,
+ "modified": "2026-04-28 01:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Glass Cut Piece",
+ "owner": "Administrator",
+ "sort_order": 50,
+ "track_changes": 1,
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ]
+}
