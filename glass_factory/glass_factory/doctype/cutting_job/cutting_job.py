@@ -119,7 +119,7 @@ class CuttingJob(Document):
 		if not self.tabular_files:
 			frappe.throw("Attach at least one tabular file.")
 
-		pre_rows = self._load_excel_rows(self.attached_stock_pre)
+		pre_rows = self._load_excel_rows(self.attached_stock_pre, has_header=False)
 		post_rows = self._load_excel_rows(self.attached_stock_post)
 		consumed, remnants = parse_stock_diff(pre_rows, post_rows)
 
@@ -182,6 +182,17 @@ class CuttingJob(Document):
 
 		# Build (do not insert yet) — fail fast before touching the DB
 		stock_entries = build_stock_entries(self, parsed_payload)
+
+		# Defence in depth: a non-empty `consumed` must yield at least one SE.
+		# Without this guard, a parser regression that produces an empty
+		# `consumed` (e.g. headerless stock_pre being read with has_header=True)
+		# silently completes the job with no Stock Entry posted.
+		if parsed_payload.get("consumed") and not stock_entries:
+			frappe.throw(
+				f"Cutting Job {self.name}: build_stock_entries produced no Stock Entry "
+				f"despite {len(parsed_payload['consumed'])} consumed row(s) in payload. "
+				"Refusing to mark job Completed."
+			)
 
 		# Insert + submit each SE
 		submitted_ses = []
@@ -246,12 +257,20 @@ class CuttingJob(Document):
 		)
 		return file_doc.file_url
 
-	def _load_excel_rows(self, file_url: str):
+	# Fixed column schema for headerless COP stock files (stock_pre.xlsx).
+	# COP rejects files containing a header row, so we generate them headerless
+	# and supply this schema when reading them back.
+	_COP_STOCK_HEADERS = ["#", "Length", "Width", "Quantity", "Material", "Texture", "Label", "Price"]
+
+	def _load_excel_rows(self, file_url: str, has_header: bool = True):
 		"""
 		Load rows from an attached Excel file.
 
 		Uses the private-files path; file_url is the Frappe file URL
 		(e.g. /private/files/foo.xlsx).
+
+		has_header=False is for files COP requires to be headerless
+		(stock_pre.xlsx). The fixed `_COP_STOCK_HEADERS` schema is used instead.
 		"""
 		filename = file_url.split("/")[-1]
 		file_path = frappe.utils.get_site_path("private", "files", filename)
@@ -259,9 +278,9 @@ class CuttingJob(Document):
 		ws = wb.active
 
 		rows = []
-		headers = None
+		headers = None if has_header else list(self._COP_STOCK_HEADERS)
 		for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
-			if row_idx == 0:
+			if has_header and row_idx == 0:
 				headers = [str(h) if h is not None else "" for h in row]
 				continue
 			if not any(row):

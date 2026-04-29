@@ -4,13 +4,14 @@
  "docstatus": 0,
  "doctype": "Report",
  "filters": [],
- "is_standard": 1,
- "modified": "2026-04-28 01:00:00.000000",
+ "is_standard": "Yes",
+ "modified": "2026-04-29 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Remnant Inventory",
  "owner": "Administrator",
+ "ref_doctype": "Item",
  "report_name": "Remnant Inventory",
- "report_type": "Query Report",
+ "report_type": "Script Report",
  "roles": []
 }

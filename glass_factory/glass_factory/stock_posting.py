@@ -248,6 +248,10 @@ def _build_entry_for_spec(
 	# ------------------------------------------------------------------
 	# Step 8: add scrap row (non-serialised, zero rate)
 	# ------------------------------------------------------------------
+	# Round to 6 dp (≈ 1 mm² in m²) — anything below is float noise from
+	# consumed_area − piece_area − remnant_area and would trip ERPNext's
+	# "Qty in Stock UOM can not be zero" check on the scrap row.
+	scrap_qty = flt(scrap_qty, 6)
 	if scrap_qty > 0:
 		scrap_item = settings.scrap_item_code or "Glass Scrap"
 		scrap_uom = frappe.get_cached_value("Item", scrap_item, "stock_uom") or "Sq m"
