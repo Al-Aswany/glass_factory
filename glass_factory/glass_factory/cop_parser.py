@@ -70,7 +70,7 @@ def parse_tabular_files(files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 				"rotated": bool(row.get("Rotated", False)),
 				"sales_order": sales_order,
 				"sales_order_item_idx": idx,
-				"customer": row.get("CustomerName", ""),
+				"customer": row.get("Customer name", ""),
 				"label": label,
 			}
 			pieces.append(piece)

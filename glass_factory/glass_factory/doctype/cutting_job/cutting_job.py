@@ -76,7 +76,6 @@ class CuttingJob(Document):
 		wb_pieces = Workbook()
 		ws = wb_pieces.active
 		ws.title = "Pieces"
-		ws.append(["#", "Length", "Width", "Quantity", "Material", "Texture", "Label", "Customer name"])
 		for idx, piece in enumerate(self.pieces):
 			# Label format required by COP parser: "{user_label} | {SO}-{0-based-idx}"
 			label = f"{piece.label} | {piece.sales_order}-{piece.sales_order_item}"
@@ -87,7 +86,6 @@ class CuttingJob(Document):
 		wb_stock = Workbook()
 		ws2 = wb_stock.active
 		ws2.title = "Stock"
-		ws2.append(["#", "Length", "Width", "Quantity", "Material", "Texture", "Label", "Price"])
 		for idx, (material, length, width, qty) in enumerate(self._aggregate_source_sheets()):
 			ws2.append([idx + 1, length, width, qty, material, 2, material, 0])
 
@@ -150,9 +148,12 @@ class CuttingJob(Document):
 		self.remnants_created = len(remnants)
 		self.total_waste_m2 = scrap_m2
 		consumed_area = sum((l * w / 1e6) * q for _, l, w, q in consumed)
-		self.utilization_pct = (
-			((consumed_area - scrap_m2) / consumed_area * 100) if consumed_area else 0
+		piece_area = sum(
+			p["length"] * p["width"] / 1e6
+			for s in sheets
+			for p in s["pieces"]
 		)
+		self.utilization_pct = (piece_area / consumed_area * 100) if consumed_area else 0
 		self.sheets_consumed = sum(int(q) for _, _l, _w, q in consumed)
 		self.status = "Result Uploaded"
 		self.flags.ignore_validate = True
@@ -175,7 +176,9 @@ class CuttingJob(Document):
 		if not parsed_payload:
 			parsed_payload = self.flags.get("parsed_payload")
 		if not parsed_payload:
-			frappe.throw("No parsed payload found. Run 'Process Result' first in this session.")
+			# Re-parse from the attached files (payload doesn't survive across requests)
+			self.process_result()
+			parsed_payload = self.flags.get("parsed_payload")
 
 		# Build (do not insert yet) — fail fast before touching the DB
 		stock_entries = build_stock_entries(self, parsed_payload)

@@ -94,9 +94,16 @@ def _build_entry_for_spec(
 	settings,
 ) -> "frappe.model.document.Document":
 
-	company = frappe.get_value("Cutting Job", cutting_job.name, "company") \
-		or frappe.defaults.get_user_default("Company") \
+	so_name = (
+		cutting_job.linked_sales_orders[0].sales_order
+		if cutting_job.linked_sales_orders
+		else None
+	)
+	company = (
+		(frappe.get_value("Sales Order", so_name, "company") if so_name else None)
+		or frappe.defaults.get_user_default("Company")
 		or frappe.get_value("Company", {"is_group": 0}, "name")
+	)
 
 	se = frappe.new_doc("Stock Entry")
 	se.stock_entry_type = "Repack"
@@ -272,6 +279,18 @@ def _assert_settings(settings):
 			f"Glass Cutting Settings is missing warehouse links: {', '.join(missing)}. "
 			"Run the after_install hook or configure them manually."
 		)
+	scrap_item = settings.get("scrap_item_code")
+	if scrap_item and not frappe.db.exists("Item", scrap_item):
+		frappe.throw(
+			f"Scrap item <b>{scrap_item}</b> set in Glass Cutting Settings does not exist. "
+			"Please create the item or update the setting."
+		)
+	if not scrap_item and not frappe.db.exists("Item", "Glass Scrap"):
+		frappe.throw(
+			"No <b>scrap_item_code</b> is configured in Glass Cutting Settings and the fallback "
+			"item <b>Glass Scrap</b> does not exist. Please create a scrap item and link it in "
+			"Glass Cutting Settings."
+		)
 
 
 def _fifo_pick_serials(item_code: str, length: float, width: float, qty: int, warehouse: str) -> List[str]:
@@ -289,7 +308,7 @@ def _fifo_pick_serials(item_code: str, length: float, width: float, qty: int, wa
 			"status": "Active",
 		},
 		fields=["name"],
-		order_by="purchase_date asc, creation asc",
+		order_by="creation asc",
 		limit=qty,
 	)
 
@@ -334,7 +353,7 @@ def _lazy_create_item(parent_code: str, suffix: str, length: float, width: float
 		return derived_code
 
 	parent_item = frappe.get_doc("Item", parent_code)
-	new_item = frappe.copy_doc(parent_item, ignore_links=True)
+	new_item = frappe.copy_doc(parent_item)
 	new_item.item_code = derived_code
 	new_item.item_name = derived_code
 	new_item.has_variants = 0
@@ -355,6 +374,7 @@ def _new_serial(item_code: str, length: float, width: float, cutting_job_name: s
 	Stock Entry item row.
 	"""
 	serial = frappe.new_doc("Serial No")
+	serial.serial_no = f"{item_code}-{frappe.generate_hash(length=8).upper()}"
 	serial.item_code = item_code
 	serial.length_mm = int(length)
 	serial.width_mm = int(width)

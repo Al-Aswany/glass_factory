@@ -5,69 +5,186 @@ from frappe.utils import flt
 # Marker embedded in Quotation Item description so we can identify generated rows
 _GCP_MARKER = "__glass_cut_piece__"
 
-
 def compute_cut_pieces(doc, method=None):
-	"""
-	Mirror the cut_pieces child table to standard Quotation/Sales Order Items.
+    """
+    Syncs the cut_pieces child table to standard Items.
+    """
+    # 1. Loop guard to prevent infinite recursion during save
+    if getattr(doc.flags, "cut_pieces_already_synced", False):
+        return
 
-	Strategy: items tagged with _GCP_MARKER in their description were generated
-	by a previous run of this hook.  We remove those and re-add fresh ones so
-	the pricing always stays in sync with the current cut_pieces table.
-	Non-tagged items (manually added by the user) are left untouched.
+    # 2. Basic validation
+    if not doc.get("cut_pieces"):
+        doc.flags.cut_pieces_already_synced = True
+        return
 
-	Loop guard prevents re-entrancy when the save triggered by this hook fires
-	another before_save event.
-	"""
-	if getattr(doc.flags, "cut_pieces_already_synced", False):
-		return
+    settings = _get_settings()
+    
+    # Use a local constant if not defined globally
+    marker = locals().get("_GCP_MARKER", "")
 
-	if not doc.get("cut_pieces"):
-		doc.flags.cut_pieces_already_synced = True
-		return
+    # 3. Filter out previously generated rows
+    # We keep manually added rows and ignore empty rows
+    valid_manual_items = []
+    for item in doc.get("items"):
+        description = item.description or ""
+        if item.item_code and marker not in description:
+            valid_manual_items.append(item)
+    
+    doc.set("items", valid_manual_items)
 
-	settings = _get_settings()
+    # 4. Generate fresh items from cut_pieces
+    for cut_piece in doc.cut_pieces:
+        parent_item = cut_piece.parent_item
+        if not parent_item:
+            continue
 
-	# Remove previously generated rows; keep manually-added rows
-	doc.items = [item for item in doc.get("items") if _GCP_MARKER not in (item.description or "")]
+        # Area Calculation
+        piece_area_m2 = max(
+            (flt(cut_piece.length_mm) * flt(cut_piece.width_mm)) / 1_000_000.0,
+            flt(settings.min_chargeable_area_m2) or 0.05,
+        )
 
-	for cut_piece in doc.cut_pieces:
-		parent_item = cut_piece.parent_item
-		if not parent_item:
-			continue
+        # Pricing Logic
+        material_rate = _get_item_price(
+            parent_item, 
+            doc.get("selling_price_list") or "Standard Selling", 
+            doc.get("currency")
+        )
+        
+        material_cost = piece_area_m2 * material_rate
+        edge_cost = _compute_edge_cost(cut_piece, settings)
+        price_per_piece = material_cost + edge_cost
 
-		piece_area_m2 = max(
-			(flt(cut_piece.length_mm) * flt(cut_piece.width_mm)) / 1_000_000.0,
-			flt(settings.min_chargeable_area_m2) or 0.05,
-		)
+        total_qty_pieces = flt(cut_piece.qty) or 1
+        total_area = piece_area_m2 * total_qty_pieces
+        line_total = price_per_piece * total_qty_pieces
+        
+        # Determine the rate per UOM (m2)
+        rate_per_m2 = line_total / total_area if total_area > 0 else 0
+        description = _build_description(cut_piece)
 
-		material_rate = flt(frappe.get_cached_value("Item", parent_item, "standard_rate"))
-		material_cost = piece_area_m2 * material_rate
-		edge_cost = _compute_edge_cost(cut_piece, settings)
-		price_per_piece = material_cost + edge_cost
+        # Fetch Item Metadata efficiently
+        item_name = frappe.get_cached_value("Item", parent_item, "item_name")
+        stock_uom = frappe.get_cached_value("Item", parent_item, "stock_uom") or "Sq m"
 
-		total_qty_pieces = flt(cut_piece.qty) or 1
-		total_area = piece_area_m2 * total_qty_pieces
-		line_total = price_per_piece * total_qty_pieces
-		rate_per_m2 = line_total / total_area if total_area > 0 else 0
+        # 5. Build the row dictionary
+        item_row_data = {
+            "item_code": parent_item,
+            "item_name": item_name or parent_item,
+            "qty": total_area,
+            "uom": stock_uom,
+            "conversion_factor": 1.0,
+            "stock_qty": total_area,
+            "price_list_rate": rate_per_m2,
+            "discount_percentage": 0,
+            "rate": rate_per_m2,
+            "amount": line_total, # Explicitly use total to avoid rounding drift
+            "description": f"{description}\n{marker}",         
+        }
 
-		description = _build_description(cut_piece)
+        if doc.doctype == "Sales Order":
+            item_row_data["delivery_date"] = doc.delivery_date
 
-		item_row = doc.append("items", {
-			"item_code": parent_item,
-			"qty": total_area,
-			"uom": "Sq m",
-			"rate": rate_per_m2,
-			"description": description,
-		})
+        # 6. Append and Link
+        # doc.append returns the newly created Row object
+        new_item_row = doc.append("items", item_row_data)
+        
+        # Ensure the row has a name (ID) so the link is stable
+        if not new_item_row.name:
+            new_item_row.set_new_name()
+            
+        cut_piece.linked_quotation_item = new_item_row.name
 
-		# Pre-assign a name so linked_quotation_item is stable across saves.
-		# Frappe honours pre-set child row names during insert.
-		if not item_row.name:
-			item_row.name = frappe.generate_hash(length=10)
+    # 7. Finalize
+    doc.flags.cut_pieces_already_synced = True
+    doc.run_method("calculate_taxes_and_totals")
+# def compute_cut_pieces(doc, method=None):
+# 	"""
+# 	Mirror the cut_pieces child table to standard Quotation/Sales Order Items.
 
-		cut_piece.linked_quotation_item = item_row.name
+# 	Strategy: items tagged with _GCP_MARKER in their description were generated
+# 	by a previous run of this hook.  We remove those and re-add fresh ones so
+# 	the pricing always stays in sync with the current cut_pieces table.
+# 	Non-tagged items (manually added by the user) are left untouched.
 
-	doc.flags.cut_pieces_already_synced = True
+# 	Loop guard prevents re-entrancy when the save triggered by this hook fires
+# 	another before_save event.
+# 	"""
+# 	if getattr(doc.flags, "cut_pieces_already_synced", False):
+# 		return
+
+# 	if not doc.get("cut_pieces"):
+# 		doc.flags.cut_pieces_already_synced = True
+# 		return
+
+# 	settings = _get_settings()
+
+# 	# Remove previously generated rows and blank rows; keep non-empty manually-added rows
+# 	doc.items = [
+# 		item for item in doc.get("items")
+# 		if item.get("item_code") and _GCP_MARKER not in (item.description or "")
+# 	]
+
+# 	for cut_piece in doc.cut_pieces:
+# 		parent_item = cut_piece.parent_item
+# 		if not parent_item:
+# 			continue
+
+# 		piece_area_m2 = max(
+# 			(flt(cut_piece.length_mm) * flt(cut_piece.width_mm)) / 1_000_000.0,
+# 			flt(settings.min_chargeable_area_m2) or 0.05,
+# 		)
+
+# 		material_rate = _get_item_price(parent_item, doc.get("selling_price_list") or "Standard Selling", doc.get("currency"))
+# 		material_cost = piece_area_m2 * material_rate
+# 		edge_cost = _compute_edge_cost(cut_piece, settings)
+# 		price_per_piece = material_cost + edge_cost
+
+# 		total_qty_pieces = flt(cut_piece.qty) or 1
+# 		total_area = piece_area_m2 * total_qty_pieces
+# 		line_total = price_per_piece * total_qty_pieces
+# 		rate_per_m2 = line_total / total_area if total_area > 0 else 0
+
+# 		description = _build_description(cut_piece)
+
+# 		item_meta = frappe.db.get_value(
+# 			"Item",
+# 			parent_item,
+# 			["item_name", "stock_uom", "description"],
+# 			as_dict=True,
+# 		) or {}
+
+# 		uom = item_meta.get("stock_uom") or "Sq m"
+# 		item_row =  {
+# 			"item_code": parent_item,
+# 			"item_name": item_meta.get("item_name") or parent_item,
+# 			"qty": total_area,
+# 			"uom": uom,
+# 			"conversion_factor": 1.0,
+# 			"stock_qty": total_area,
+# 			"ordered_qty": 0,
+# 			"price_list_rate": rate_per_m2,
+# 			"discount_percentage": 0,
+# 			"rate": rate_per_m2,
+# 			"amount": rate_per_m2 * total_area,
+# 			"description": description,			
+# 		}
+# 		if doc.doctype == "Sales Order":
+# 			delivery_date = doc.get("delivery_date")
+# 			item_row["delivery_date"] = delivery_date
+
+# 		doc.append("items", item_row)
+	
+# 		# Pre-assign a name so linked_quotation_item is stable across saves.
+# 		# Frappe honours pre-set child row names during insert.
+# 		if not item_row.name:
+# 			item_row.name = frappe.generate_hash(length=10)
+
+# 		cut_piece.linked_quotation_item = item_row.name
+
+# 	doc.flags.cut_pieces_already_synced = True
+# 	doc.run_method("calculate_taxes_and_totals")
 
 
 def copy_cut_pieces_to_so(doc, method=None):
@@ -140,6 +257,16 @@ def _compute_edge_cost(cut_piece, settings):
 		+ flt(cut_piece.get("holes")) * hole_rate
 		+ (bevel_rate if cut_piece.get("bevel") else 0.0)
 	)
+
+
+def _get_item_price(item_code, price_list, currency=None):
+	filters = {"item_code": item_code, "price_list": price_list}
+	if currency:
+		filters["currency"] = currency
+	rate = frappe.db.get_value("Item Price", filters, "price_list_rate")
+	if not rate:
+		rate = frappe.db.get_value("Item Price", {"item_code": item_code, "price_list": price_list}, "price_list_rate")
+	return flt(rate) or flt(frappe.db.get_value("Item", item_code, "valuation_rate"))
 
 
 def _build_description(cut_piece):
