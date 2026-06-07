@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "creation": "2026-06-07 14:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "raw_sheet_item",
+  "length_mm",
+  "width_mm",
+  "thickness_mm",
+  "qty",
+  "rate",
+  "section_processing",
+  "process_polish",
+  "process_bevel",
+  "process_holes",
+  "process_slots",
+  "process_temper",
+  "process_sandblast",
+  "process_laminate",
+  "section_resolved",
+  "area_m2",
+  "final_item",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "raw_sheet_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Glass Sheet",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "length_mm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Length (mm)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "width_mm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Width (mm)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "thickness_mm",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Thickness (mm)"
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty",
+   "reqd": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate"
+  },
+  {
+   "fieldname": "section_processing",
+   "fieldtype": "Section Break",
+   "label": "Processing"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_polish",
+   "fieldtype": "Check",
+   "label": "Polish"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_bevel",
+   "fieldtype": "Check",
+   "label": "Bevel"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_holes",
+   "fieldtype": "Check",
+   "label": "Holes / Drilling"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_slots",
+   "fieldtype": "Check",
+   "label": "Slots"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_temper",
+   "fieldtype": "Check",
+   "label": "Tempered"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_sandblast",
+   "fieldtype": "Check",
+   "label": "Sandblast"
+  },
+  {
+   "default": "0",
+   "fieldname": "process_laminate",
+   "fieldtype": "Check",
+   "label": "Laminated"
+  },
+  {
+   "fieldname": "section_resolved",
+   "fieldtype": "Section Break",
+   "label": "Resolved Item"
+  },
+  {
+   "fieldname": "area_m2",
+   "fieldtype": "Float",
+   "label": "Area (m²)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "final_item",
+   "fieldtype": "Link",
+   "label": "Final Item",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Label",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "modified": "2026-06-07 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Quotation Glass Piece",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_order": 50,
+ "track_changes": 1
+}

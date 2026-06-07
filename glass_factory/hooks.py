@@ -45,7 +45,11 @@ fixtures = []
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+	"Item": "public/js/item_glass.js",
+	"Quotation": "public/js/quotation_glass.js",
+	"Sales Order": "public/js/sales_order_glass.js",
+}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -141,14 +145,28 @@ after_install = "glass_factory.install.after_install"
 
 doc_events = {
 	"Quotation": {
-		"before_save": "glass_factory.quotation_hooks.compute_cut_pieces",
+		"before_validate": [
+			"glass_factory.glass_factory.quotation_glass.sync_glass_pieces_to_items",
+			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
+		],
+		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
 	},
 	"Sales Order": {
-		"before_insert": "glass_factory.quotation_hooks.copy_cut_pieces_to_so",
-		"before_save": "glass_factory.quotation_hooks.compute_cut_pieces",
+		"validate": "glass_factory.glass_factory.selling_validations.resolve_glass_items",
+		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
+	},
+	"Delivery Note": {
+		"validate": "glass_factory.glass_factory.selling_validations.validate_delivery_note",
+		"on_submit": "glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
+	},
+	"Stock Entry": {
+		"validate": "glass_factory.glass_factory.selling_validations.validate_stock_entry",
 	},
 	"Serial No": {
 		"before_save": "glass_factory.glass_factory.serial_no_hooks.compute_area",
+	},
+	"Item": {
+		"validate": "glass_factory.glass_factory.item_glass_hooks.validate_glass_item",
 	},
 }
 

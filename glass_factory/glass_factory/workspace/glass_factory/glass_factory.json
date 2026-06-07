@@ -28,11 +28,11 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Glass Cut Piece",
+   "label": "Glass Processing Job",
    "link_count": 0,
-   "link_to": "Glass Cut Piece",
+   "link_to": "Glass Processing Job",
    "link_type": "DocType",
-   "onboard": 0,
+   "onboard": 1,
    "type": "Link"
   },
   {
@@ -61,9 +61,9 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Glass Cutting Settings",
+   "label": "Glass Factory Settings",
    "link_count": 0,
-   "link_to": "Glass Cutting Settings",
+   "link_to": "Glass Factory Settings",
    "link_type": "DocType",
    "onboard": 1,
    "type": "Link"

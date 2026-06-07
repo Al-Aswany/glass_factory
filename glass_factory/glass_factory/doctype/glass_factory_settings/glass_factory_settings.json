@@ -1,0 +1,181 @@
+{
+ "actions": [],
+ "creation": "2026-06-07 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "warehouses_section",
+  "raw_warehouse",
+  "cut_wip_warehouse",
+  "final_goods_warehouse",
+  "remnants_warehouse",
+  "scrap_warehouse",
+  "items_section",
+  "default_uom",
+  "default_item_group",
+  "raw_item_group",
+  "cut_wip_item_group",
+  "final_item_group",
+  "remnant_item_group",
+  "scrap_item_group",
+  "scrap_item",
+  "rules_section",
+  "min_remnant_area_m2",
+  "min_remnant_side_mm",
+  "min_chargeable_area_m2",
+  "enable_cop"
+ ],
+ "fields": [
+  {
+   "fieldname": "warehouses_section",
+   "fieldtype": "Section Break",
+   "label": "Warehouses"
+  },
+  {
+   "fieldname": "raw_warehouse",
+   "fieldtype": "Link",
+   "label": "Raw Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "cut_wip_warehouse",
+   "fieldtype": "Link",
+   "label": "Cut WIP Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "final_goods_warehouse",
+   "fieldtype": "Link",
+   "label": "Final Goods Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "remnants_warehouse",
+   "fieldtype": "Link",
+   "label": "Remnants Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "scrap_warehouse",
+   "fieldtype": "Link",
+   "label": "Scrap Warehouse",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "items_section",
+   "fieldtype": "Section Break",
+   "label": "Items"
+  },
+  {
+   "default": "Nos",
+   "fieldname": "default_uom",
+   "fieldtype": "Link",
+   "label": "Default UOM",
+   "options": "UOM"
+  },
+  {
+   "default": "All Item Groups",
+   "fieldname": "default_item_group",
+   "fieldtype": "Link",
+   "label": "Default Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "raw_item_group",
+   "fieldtype": "Link",
+   "label": "Raw Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "cut_wip_item_group",
+   "fieldtype": "Link",
+   "label": "Cut WIP Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "final_item_group",
+   "fieldtype": "Link",
+   "label": "Final Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "remnant_item_group",
+   "fieldtype": "Link",
+   "label": "Remnant Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "scrap_item_group",
+   "fieldtype": "Link",
+   "label": "Scrap Item Group",
+   "options": "Item Group"
+  },
+  {
+   "fieldname": "scrap_item",
+   "fieldtype": "Link",
+   "label": "Scrap Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "Rules"
+  },
+  {
+   "default": "0.1",
+   "fieldname": "min_remnant_area_m2",
+   "fieldtype": "Float",
+   "label": "Min Remnant Area (m²)"
+  },
+  {
+   "default": "100",
+   "fieldname": "min_remnant_side_mm",
+   "fieldtype": "Int",
+   "label": "Min Remnant Side (mm)"
+  },
+  {
+   "default": "0.05",
+   "fieldname": "min_chargeable_area_m2",
+   "fieldtype": "Float",
+   "label": "Min Chargeable Area (m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_cop",
+   "fieldtype": "Check",
+   "label": "Enable COP"
+  }
+ ],
+ "issingle": 1,
+ "modified": "2026-06-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Glass Factory Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_order": 50,
+ "track_changes": 1
+}

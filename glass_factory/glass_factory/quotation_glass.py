@@ -1,0 +1,141 @@
+"""Quotation glass child-table sync into standard Quotation Item rows."""
+
+from __future__ import annotations
+
+import frappe
+from frappe.utils import cint, flt
+
+from glass_factory.glass_factory.item_resolver import PROCESS_ORDER, get_item_glass_meta, resolve_row_items
+
+PIECE_FLAG_FIELDS = (
+	("process_polish", "POL"),
+	("process_bevel", "BEV"),
+	("process_holes", "HOL"),
+	("process_slots", "SLT"),
+	("process_temper", "TMP"),
+	("process_sandblast", "SBL"),
+	("process_laminate", "LAM"),
+)
+
+
+def sync_glass_pieces_to_items(doc, method=None):
+	"""Build/update Quotation Item rows from the glass child table."""
+	if doc.doctype != "Quotation":
+		return
+
+	glass_pieces = doc.get("glass_pieces") or []
+	if not glass_pieces:
+		return
+
+	manual_rows = [
+		row.as_dict(convert_dates=True)
+		for row in doc.get("items") or []
+		if not cint(row.get("gf_is_glass_item"))
+	]
+	synced_rows = []
+
+	for piece in glass_pieces:
+		_validate_piece(piece)
+		source_id = piece.name or f"new-{piece.idx}"
+
+		row_data = _build_item_row(doc, piece, source_id)
+		piece.area_m2 = row_data["gf_area_m2"]
+		piece.final_item = row_data["gf_final_item"]
+		piece.description = row_data.get("description") or row_data["item_name"]
+		synced_rows.append(row_data)
+
+	# Drop stale auto-generated glass lines; keep manual non-glass lines.
+	doc.set("items", [])
+	for row in manual_rows + synced_rows:
+		doc.append("items", row)
+
+
+def processing_flags_from_piece(piece) -> str:
+	"""Convert user-friendly checkboxes to canonical flag string."""
+	flags = [code for fieldname, code in PIECE_FLAG_FIELDS if cint(piece.get(fieldname))]
+	flags = [flag for flag in PROCESS_ORDER if flag in flags]
+	return "-".join(flags)
+
+
+def _validate_piece(piece) -> None:
+	if not piece.raw_sheet_item:
+		frappe.throw(f"Glass row {piece.idx}: Glass Sheet is required.")
+	if flt(piece.length_mm) <= 0 or flt(piece.width_mm) <= 0:
+		frappe.throw(f"Glass row {piece.idx}: Length and width must be greater than zero.")
+	if flt(piece.qty) <= 0:
+		frappe.throw(f"Glass row {piece.idx}: Quantity must be greater than zero.")
+
+
+def _build_item_row(doc, piece, source_id: str) -> dict:
+	thickness = flt(piece.thickness_mm)
+	if thickness <= 0:
+		thickness = flt(get_item_glass_meta(piece.raw_sheet_item).get("gf_thickness_mm"))
+
+	resolved = frappe._dict({
+		"idx": piece.idx,
+		"gf_is_glass_item": 1,
+		"gf_raw_sheet_item": piece.raw_sheet_item,
+		"gf_length_mm": flt(piece.length_mm),
+		"gf_width_mm": flt(piece.width_mm),
+		"gf_thickness_mm": thickness,
+		"gf_processing_flags": processing_flags_from_piece(piece),
+		"qty": flt(piece.qty),
+	})
+	resolve_row_items(resolved)
+
+	item = frappe.get_doc("Item", resolved.item_code)
+	rate = flt(piece.rate) or flt(item.standard_rate) or 0
+
+	return {
+		"gf_is_glass_item": 1,
+		"gf_glass_specification": resolved.gf_glass_specification,
+		"gf_raw_sheet_item": resolved.gf_raw_sheet_item,
+		"gf_cut_wip_item": resolved.gf_cut_wip_item,
+		"gf_final_item": resolved.gf_final_item,
+		"gf_length_mm": resolved.gf_length_mm,
+		"gf_width_mm": resolved.gf_width_mm,
+		"gf_thickness_mm": resolved.gf_thickness_mm,
+		"gf_processing_flags": resolved.gf_processing_flags,
+		"gf_area_m2": resolved.gf_area_m2,
+		"gf_source_row_id": source_id,
+		"item_code": resolved.item_code,
+		"item_name": item.item_name or item.name,
+		"description": item.item_name or item.name,
+		"qty": flt(piece.qty),
+		"rate": rate,
+		"uom": item.stock_uom or "Nos",
+		"stock_uom": item.stock_uom or "Nos",
+		"conversion_factor": 1,
+	}
+
+
+def quotation_has_glass_pieces(doc) -> bool:
+	return bool(doc.get("glass_pieces"))
+
+
+@frappe.whitelist()
+def build_quotation_items_from_glass(glass_pieces, manual_items=None):
+	"""Build Quotation Item rows from glass pieces for client-side pre-save sync."""
+	glass_pieces = frappe.parse_json(glass_pieces)
+	manual_items = frappe.parse_json(manual_items) if manual_items else []
+
+	synced_rows = []
+	updated_pieces = []
+
+	for piece in glass_pieces:
+		piece = frappe._dict(piece)
+		_validate_piece(piece)
+		source_id = piece.name or f"new-{piece.idx}"
+		row_data = _build_item_row(None, piece, source_id)
+		synced_rows.append(row_data)
+		updated_pieces.append({
+			**piece,
+			"area_m2": row_data["gf_area_m2"],
+			"final_item": row_data["gf_final_item"],
+			"description": row_data.get("description") or row_data["item_name"],
+		})
+
+	return {
+		"items": manual_items + synced_rows,
+		"glass_pieces": updated_pieces,
+	}

@@ -1,0 +1,48 @@
+{
+ "actions": [],
+ "creation": "2026-06-07 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "company",
+  "cutting_job",
+  "section_inputs",
+  "inputs",
+  "section_outputs",
+  "outputs",
+  "section_operations",
+  "operations",
+  "section_links",
+  "linked_stock_entry",
+  "remarks"
+ ],
+ "fields": [
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Draft\nReady for Processing\nProcessing In Progress\nFinal Stock Posted\nCompleted\nCancelled", "reqd": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
+  {"fieldname": "cutting_job", "fieldtype": "Link", "in_list_view": 1, "label": "Cutting Job", "options": "Cutting Job"},
+  {"fieldname": "section_inputs", "fieldtype": "Section Break", "label": "Inputs"},
+  {"fieldname": "inputs", "fieldtype": "Table", "label": "Inputs", "options": "Glass Processing Job Input"},
+  {"fieldname": "section_outputs", "fieldtype": "Section Break", "label": "Outputs"},
+  {"fieldname": "outputs", "fieldtype": "Table", "label": "Outputs", "options": "Glass Processing Job Output"},
+  {"fieldname": "section_operations", "fieldtype": "Section Break", "label": "Operations"},
+  {"fieldname": "operations", "fieldtype": "Table", "label": "Operations", "options": "Glass Processing Operation"},
+  {"fieldname": "section_links", "fieldtype": "Section Break", "label": "Linked Documents"},
+  {"fieldname": "linked_stock_entry", "fieldtype": "Link", "label": "Repack #2 Stock Entry", "options": "Stock Entry", "read_only": 1},
+  {"fieldname": "remarks", "fieldtype": "Text Editor", "label": "Remarks"}
+ ],
+ "is_submittable": 1,
+ "modified": "2026-06-07 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Glass Processing Job",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "System Manager", "share": 1, "submit": 1, "cancel": 1, "amend": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Manager", "share": 1, "submit": 1, "cancel": 1, "amend": 1, "write": 1},
+  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Production Planner", "share": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Processing Operator", "share": 1, "write": 1}
+ ],
+ "sort_order": "DESC",
+ "track_changes": 1
+}

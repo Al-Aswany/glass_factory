@@ -1,321 +1,284 @@
-"""Cutting Job controller — orchestrates the COP round-trip workflow."""
-import json
-from collections import defaultdict
+"""Manual Cutting Job controller for Phase 0 glass MVP."""
+
+from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import nowdate, nowtime
-from openpyxl import Workbook, load_workbook
+from frappe.utils import flt
 
-from glass_factory.glass_factory.cop_parser import (
-	cross_validate,
-	parse_label,
-	parse_stock_diff,
-	parse_tabular_files,
-)
-from glass_factory.glass_factory.stock_posting import build_stock_entries
+from glass_factory.glass_factory.item_resolver import get_item_glass_meta, item_role
+from glass_factory.glass_factory.stock_posting import build_cutting_repack
 
 
 class CuttingJob(Document):
-
-	# ------------------------------------------------------------------
-	# Lifecycle
-	# ------------------------------------------------------------------
-
 	def validate(self):
-		"""Gate promotions to Result Uploaded so we never post bad data."""
-		if self.status == "Result Uploaded":
-			if not self.attached_stock_post:
-				frappe.throw("Attach stock_post.xlsx before setting status to 'Result Uploaded'.")
-			if not self.tabular_files:
-				frappe.throw("At least one tabular file must be attached.")
-			for tf in self.tabular_files:
-				if not tf.attached_file or not tf.sheet_index:
-					frappe.throw("Every tabular-file row must have a file and a sheet index.")
-
-	# ------------------------------------------------------------------
-	# Whitelisted actions (called from client-side buttons)
-	# ------------------------------------------------------------------
+		self._validate_sales_orders()
+		self._validate_pieces()
+		self._validate_assignment_limits()
+		self._validate_source_sheets()
 
 	@frappe.whitelist()
-	def pull_pieces_from_sales_orders(self):
-		"""Populate the pieces child table from all linked SO cut_pieces rows."""
-		self.pieces = []
+	def pull_from_sales_orders(self):
+		"""Populate pieces and source sheets from linked submitted Sales Orders."""
+		self._populate_from_sales_orders()
+		self.save(ignore_permissions=True)
+		return {
+			"message": (
+				f"Pulled {len(self.pieces)} glass piece row(s) "
+				f"and {len(self.source_sheets)} source sheet row(s)."
+			)
+		}
 
-		for so_link in self.linked_sales_orders or []:
-			so_name = so_link.sales_order if hasattr(so_link, "sales_order") else so_link.get("sales_order")
-			if not so_name:
+	def _populate_from_sales_orders(self):
+		self.set("pieces", [])
+		for link in self.get("sales_orders") or []:
+			if not link.sales_order:
 				continue
-
-			so = frappe.get_doc("Sales Order", so_name)
-			for idx, cp in enumerate(so.cut_pieces or []):
+			so = frappe.get_doc("Sales Order", link.sales_order)
+			if so.docstatus != 1:
+				frappe.throw(f"Sales Order {so.name} must be submitted before cutting.")
+			for item in so.items:
+				if not item.get("gf_is_glass_item"):
+					continue
+				remaining = flt(item.qty) - self._assigned_qty(item.name)
+				if remaining <= 0:
+					continue
 				self.append("pieces", {
-					"parent_item": cp.parent_item,
-					"length_mm": cp.length_mm,
-					"width_mm": cp.width_mm,
-					"qty": cp.qty,
-					"label": cp.user_label or f"Piece-{idx}",
-					"customer_name": so.customer_name or so.customer,
-					"sales_order": so_name,
-					"sales_order_item": str(idx),  # 0-based index into cut_pieces
+					"sales_order": so.name,
+					"sales_order_item": item.name,
+					"customer": so.customer,
+					"raw_sheet_item": item.gf_raw_sheet_item,
+					"cut_wip_item": item.gf_cut_wip_item,
+					"final_item": item.gf_final_item or item.item_code,
+					"length_mm": item.gf_length_mm,
+					"width_mm": item.gf_width_mm,
+					"thickness_mm": item.gf_thickness_mm,
+					"processing_flags": item.gf_processing_flags,
+					"glass_specification": item.gf_glass_specification,
+					"qty_required": remaining,
+					"qty_assigned": remaining,
+					"qty_cut": remaining,
 				})
+		self._populate_source_sheets_from_pieces()
+		self.status = "Planned"
 
-		self.flags.ignore_validate = True
-		self.save()
-		return {"message": f"Pulled {len(self.pieces)} pieces from {len(self.linked_sales_orders or [])} SO(s)."}
+	def _populate_source_sheets_from_pieces(self):
+		self.set("source_sheets", [])
+		raw_warehouse = _raw_warehouse()
+		seen: set[str] = set()
+		for piece in self.get("pieces") or []:
+			raw_item = piece.get("raw_sheet_item")
+			if not raw_item or raw_item in seen:
+				continue
+			seen.add(raw_item)
+			meta = get_item_glass_meta(raw_item)
+			self.append("source_sheets", {
+				"item_code": raw_item,
+				"source_role": meta.get("gf_glass_item_role") or "Raw Sheet",
+				"warehouse": raw_warehouse,
+				"length_mm": meta.get("gf_length_mm") or 0,
+				"width_mm": meta.get("gf_width_mm") or 0,
+				"qty_consumed": 1,
+			})
+
+	# Backward-compatible old button method name.
+	def pull_pieces_from_sales_orders(self):
+		return self.pull_from_sales_orders()
+
+	@frappe.whitelist()
+	def create_repack_stock_entry(self):
+		if self.linked_stock_entry:
+			return {"stock_entry": self.linked_stock_entry}
+		se = build_cutting_repack(self)
+		se.insert(ignore_permissions=True)
+		self.linked_stock_entry = se.name
+		self.status = "Ready for Cutting"
+		self.save(ignore_permissions=True)
+		return {"message": "Draft Repack #1 created.", "stock_entry": se.name}
+
+	@frappe.whitelist()
+	def submit_repack_stock_entry(self):
+		if not self.linked_stock_entry:
+			self.create_repack_stock_entry()
+		se = frappe.get_doc("Stock Entry", self.linked_stock_entry)
+		if se.docstatus == 0:
+			se.submit()
+		self.status = "Cut Stock Posted"
+		for piece in self.pieces:
+			self._update_so_item(piece.sales_order_item, {
+				"gf_cutting_job": self.name,
+				"gf_cut_qty": flt(piece.get("qty_cut") or piece.get("qty_required")),
+			})
+		self.save(ignore_permissions=True)
+		return {"message": "Repack #1 submitted.", "stock_entry": se.name}
+
+	@frappe.whitelist()
+	def make_processing_job(self):
+		if self.status not in ("Cut Stock Posted", "Completed"):
+			frappe.throw("Submit Repack #1 before creating a Glass Processing Job.")
+		job = frappe.new_doc("Glass Processing Job")
+		job.cutting_job = self.name
+		job.status = "Ready for Processing"
+		for piece in self.pieces:
+			qty = flt(piece.get("qty_cut") or piece.get("qty_required"))
+			if qty <= 0:
+				continue
+			job.append("inputs", {
+				"cut_wip_item": piece.cut_wip_item,
+				"sales_order": piece.sales_order,
+				"sales_order_item": piece.sales_order_item,
+				"glass_specification": piece.glass_specification,
+				"qty": qty,
+			})
+			job.append("outputs", {
+				"final_item": piece.final_item,
+				"sales_order": piece.sales_order,
+				"sales_order_item": piece.sales_order_item,
+				"glass_specification": piece.glass_specification,
+				"qty": qty,
+			})
+			for flag in (piece.get("processing_flags") or "").split("-"):
+				if flag:
+					job.append("operations", {"operation": flag, "sales_order": piece.sales_order, "sales_order_item": piece.sales_order_item, "qty": qty, "status": "Pending"})
+		job.insert(ignore_permissions=True)
+		return {"message": "Glass Processing Job created.", "processing_job": job.name}
+
+	@frappe.whitelist()
+	def complete_job(self):
+		if self.status != "Cut Stock Posted":
+			frappe.throw("Submit Repack #1 before completing the Cutting Job.")
+		self.status = "Completed"
+		self.save(ignore_permissions=True)
+		return {"message": "Cutting Job completed."}
+
+	def _validate_sales_orders(self):
+		seen = set()
+		for row in self.get("sales_orders") or []:
+			if not row.sales_order:
+				continue
+			if row.sales_order in seen:
+				frappe.throw(f"Sales Order {row.sales_order} is duplicated.")
+			seen.add(row.sales_order)
+			if frappe.db.get_value("Sales Order", row.sales_order, "docstatus") != 1:
+				frappe.throw(f"Sales Order {row.sales_order} must be submitted.")
+
+	def _validate_pieces(self):
+		for row in self.get("pieces") or []:
+			if not row.sales_order or not row.sales_order_item:
+				frappe.throw(f"Piece row {row.idx}: Sales Order and Sales Order Item are required.")
+			if not row.cut_wip_item or not row.final_item:
+				frappe.throw(f"Piece row {row.idx}: Cut WIP Item and Final Item are required.")
+			if flt(row.get("qty_required")) <= 0:
+				frappe.throw(f"Piece row {row.idx}: required quantity must be greater than zero.")
+			assigned = flt(row.get("qty_assigned") or row.get("qty_required"))
+			if assigned <= 0:
+				frappe.throw(f"Piece row {row.idx}: assigned quantity must be greater than zero.")
+			if assigned > flt(row.get("qty_required")):
+				frappe.throw(f"Piece row {row.idx}: assigned quantity cannot exceed required quantity.")
+			if flt(row.get("qty_cut") or assigned) > assigned:
+				frappe.throw(f"Piece row {row.idx}: cut quantity cannot exceed assigned quantity.")
+			so_item = frappe.db.get_value("Sales Order Item", row.sales_order_item, ["item_code", "gf_final_item"], as_dict=True)
+			if so_item and row.final_item != (so_item.gf_final_item or so_item.item_code):
+				frappe.throw(f"Piece row {row.idx}: final Item must match Sales Order Item.")
+
+	def _validate_assignment_limits(self):
+		totals: dict[str, float] = {}
+		for row in self.get("pieces") or []:
+			if not row.sales_order_item:
+				continue
+			assigned = flt(row.get("qty_assigned") or row.get("qty_required"))
+			totals[row.sales_order_item] = totals.get(row.sales_order_item, 0) + assigned
+
+		for so_item_name, assigned_total in totals.items():
+			ordered_qty = flt(frappe.db.get_value("Sales Order Item", so_item_name, "qty"))
+			other_jobs_qty = self._assigned_qty(so_item_name)
+			if other_jobs_qty + assigned_total > ordered_qty:
+				frappe.throw(
+					f"Sales Order Item {so_item_name}: assigned quantity "
+					f"{other_jobs_qty + assigned_total} exceeds ordered quantity {ordered_qty}."
+				)
+
+	def _validate_source_sheets(self):
+		for row in self.get("source_sheets") or []:
+			if not row.item_code:
+				continue
+			role = row.get("source_role") or item_role(row.item_code)
+			if role not in ("Raw Sheet", "Remnant"):
+				frappe.throw(f"Source sheet row {row.idx}: source Item must be Raw Sheet or Remnant.")
+
+	def _assigned_qty(self, so_item_name):
+		filters = {
+			"sales_order_item": so_item_name,
+			"parenttype": "Cutting Job",
+		}
+		if self.name:
+			filters["parent"] = ["!=", self.name]
+		rows = frappe.get_all(
+			"Cutting Job Piece",
+			filters=filters,
+			fields=["qty_assigned", "qty_required"],
+		)
+		return sum(flt(row.qty_assigned or row.qty_required) for row in rows)
+
+	def _update_so_item(self, row_name, values):
+		for fieldname, value in values.items():
+			frappe.db.set_value("Sales Order Item", row_name, fieldname, value, update_modified=False)
 
 	@frappe.whitelist()
 	def generate_cop_files(self):
-		"""Generate pieces.xlsx and stock_pre.xlsx for COP input."""
-		if not self.pieces:
-			frappe.throw("No pieces — pull from Sales Orders first.")
-		if not self.source_sheets:
-			frappe.throw("Select at least one source sheet.")
-
-		# ---- pieces.xlsx ------------------------------------------------
-		wb_pieces = Workbook()
-		ws = wb_pieces.active
-		ws.title = "Pieces"
-		for idx, piece in enumerate(self.pieces):
-			# Label format required by COP parser: "{user_label} | {SO}-{0-based-idx}"
-			label = f"{piece.label} | {piece.sales_order}-{piece.sales_order_item}"
-			ws.append([idx + 1, piece.length_mm, piece.width_mm, piece.qty,
-					   piece.parent_item, 2, label, piece.customer_name])
-
-		# ---- stock_pre.xlsx ---------------------------------------------
-		wb_stock = Workbook()
-		ws2 = wb_stock.active
-		ws2.title = "Stock"
-		for idx, (material, length, width, qty) in enumerate(self._aggregate_source_sheets()):
-			ws2.append([idx + 1, length, width, qty, material, 2, material, 0])
-
-		# ---- save and attach -------------------------------------------
-		site_private = frappe.utils.get_site_path("private", "files")
-		pieces_path = f"{site_private}/cop_pieces_{self.name}.xlsx"
-		stock_path = f"{site_private}/cop_stock_pre_{self.name}.xlsx"
-		wb_pieces.save(pieces_path)
-		wb_stock.save(stock_path)
-
-		self.attached_pieces = self._attach_file(pieces_path, f"cop_pieces_{self.name}.xlsx")
-		self.attached_stock_pre = self._attach_file(stock_path, f"cop_stock_pre_{self.name}.xlsx")
-		self.status = "Awaiting Optimization"
-		self.flags.ignore_validate = True
-		self.save()
-
-		return {"message": "COP files generated.", "pieces": len(self.pieces)}
+		if not _cop_enabled():
+			frappe.throw("COP is disabled for Phase 0 manual flow.")
+		frappe.throw("COP generation is dormant in Phase 0.")
 
 	@frappe.whitelist()
 	def process_result(self):
-		"""
-		Parse the COP result files and return a confirmation payload.
-
-		The payload is stored in self.flags so confirm_and_post() can access
-		it in the same request without a round-trip.
-		"""
-		if self.status not in ("Awaiting Optimization", "Result Uploaded"):
-			frappe.throw(f"Cannot process result from status '{self.status}'.")
-		if not self.attached_stock_post:
-			frappe.throw("Attach stock_post.xlsx first.")
-		if not self.tabular_files:
-			frappe.throw("Attach at least one tabular file.")
-
-		pre_rows = self._load_excel_rows(self.attached_stock_pre, has_header=False)
-		post_rows = self._load_excel_rows(self.attached_stock_post)
-		consumed, remnants = parse_stock_diff(pre_rows, post_rows)
-
-		tabular_data = [{"rows": self._load_excel_rows(tf.attached_file)} for tf in self.tabular_files]
-		sheets = parse_tabular_files(tabular_data)
-
-		warnings = cross_validate(consumed, sheets, [p.as_dict() for p in self.pieces])
-
-		pieces_produced = sum(len(s["pieces"]) for s in sheets)
-		scrap_m2 = self._compute_scrap_area(consumed, remnants, sheets)
-
-		payload = {
-			"consumed": [{"material": m, "length": l, "width": w, "qty": q} for m, l, w, q in consumed],
-			"remnants": [{"material": m, "length": l, "width": w, "qty": q} for m, l, w, q in remnants],
-			"sheets": sheets,
-			"pieces_produced": pieces_produced,
-			"remnants_created": len(remnants),
-			"scrap_m2": scrap_m2,
-			"warnings": warnings,
-		}
-
-		self.flags.parsed_payload = payload
-
-		# Update summary fields and flip status
-		self.pieces_produced = pieces_produced
-		self.remnants_created = len(remnants)
-		self.total_waste_m2 = scrap_m2
-		consumed_area = sum((l * w / 1e6) * q for _, l, w, q in consumed)
-		piece_area = sum(
-			p["length"] * p["width"] / 1e6
-			for s in sheets
-			for p in s["pieces"]
-		)
-		self.utilization_pct = (piece_area / consumed_area * 100) if consumed_area else 0
-		self.sheets_consumed = sum(int(q) for _, _l, _w, q in consumed)
-		self.status = "Result Uploaded"
-		self.flags.ignore_validate = True
-		self.save()
-
-		return payload
+		if not _cop_enabled():
+			frappe.throw("COP is disabled for Phase 0 manual flow.")
+		frappe.throw("COP result processing is dormant in Phase 0.")
 
 	@frappe.whitelist()
 	def confirm_and_post(self, parsed_payload=None):
-		"""
-		Post Stock Entries and draft Delivery Notes.
+		return self.submit_repack_stock_entry()
 
-		Status guard prevents duplicate posts from rapid double-clicks.
-		"""
-		if self.status != "Result Uploaded":
-			frappe.throw(f"Cannot post from status '{self.status}'. Run 'Process Result' first.")
 
-		if isinstance(parsed_payload, str):
-			parsed_payload = json.loads(parsed_payload)
-		if not parsed_payload:
-			parsed_payload = self.flags.get("parsed_payload")
-		if not parsed_payload:
-			# Re-parse from the attached files (payload doesn't survive across requests)
-			self.process_result()
-			parsed_payload = self.flags.get("parsed_payload")
+def _cop_enabled():
+	if frappe.db.exists("DocType", "Glass Factory Settings"):
+		return bool(frappe.db.get_single_value("Glass Factory Settings", "enable_cop"))
+	return False
 
-		# Build (do not insert yet) — fail fast before touching the DB
-		stock_entries = build_stock_entries(self, parsed_payload)
 
-		# Defence in depth: a non-empty `consumed` must yield at least one SE.
-		# Without this guard, a parser regression that produces an empty
-		# `consumed` (e.g. headerless stock_pre being read with has_header=True)
-		# silently completes the job with no Stock Entry posted.
-		if parsed_payload.get("consumed") and not stock_entries:
-			frappe.throw(
-				f"Cutting Job {self.name}: build_stock_entries produced no Stock Entry "
-				f"despite {len(parsed_payload['consumed'])} consumed row(s) in payload. "
-				"Refusing to mark job Completed."
-			)
+@frappe.whitelist()
+def make_cutting_job(source_name, target_doc=None):
+	"""Create a Cutting Job draft linked to a submitted Sales Order."""
+	source = frappe.get_doc("Sales Order", source_name)
+	if source.docstatus != 1:
+		frappe.throw("Sales Order must be submitted before creating a Cutting Job.")
+	if not any(item.get("gf_is_glass_item") for item in source.items):
+		frappe.throw("Sales Order has no glass items.")
 
-		# Insert + submit each SE
-		submitted_ses = []
-		for se in stock_entries:
-			se.insert(ignore_permissions=True)
-			se.submit()
-			submitted_ses.append(se.name)
+	if target_doc:
+		job = frappe.get_doc(frappe.parse_json(target_doc))
+	else:
+		job = frappe.new_doc("Cutting Job")
 
-		# Record the first SE for the dashboard link (one per spec, often just one)
-		if submitted_ses:
-			self.linked_stock_entry = submitted_ses[0]
+	job.company = job.company or source.company
+	job.status = job.status or "Draft"
 
-		# Draft Delivery Notes — one per linked SO, for sales review
-		dn_names = self._create_delivery_notes()
-		self.linked_delivery_notes = ", ".join(dn_names)
+	if not any(link.sales_order == source.name for link in job.get("sales_orders") or []):
+		job.append("sales_orders", {
+			"sales_order": source.name,
+			"customer": source.customer,
+			"delivery_date": source.delivery_date,
+		})
 
-		self.status = "Completed"
-		self.flags.ignore_validate = True
-		self.save()
+	job._populate_from_sales_orders()
+	if not job.name:
+		job.insert(ignore_permissions=True)
 
-		return {
-			"message": "Posted successfully.",
-			"stock_entries": submitted_ses,
-			"delivery_notes": dn_names,
-		}
+	return job
 
-	# ------------------------------------------------------------------
-	# Private helpers
-	# ------------------------------------------------------------------
 
-	def _aggregate_source_sheets(self):
-		"""
-		Return a list of (material, length, width, qty) for the stock_pre file.
-
-		Aggregates source_sheets by (item_code, length_mm, width_mm) — the
-		same grouping COP uses to count available sheets.
-		"""
-		agg = defaultdict(float)
-		for sheet in self.source_sheets:
-			serial = frappe.get_doc("Serial No", sheet.serial_no)
-			key = (sheet.item_code, int(serial.get("length_mm") or 0), int(serial.get("width_mm") or 0))
-			agg[key] += 1
-
-		# Flatten to list of 4-tuples
-		return [(m, l, w, q) for (m, l, w), q in agg.items()]
-
-	def _attach_file(self, file_path: str, filename: str) -> str:
-		"""
-		Attach a local file to this document using Frappe's file manager.
-
-		Returns the file_url of the saved File document.
-		"""
-		with open(file_path, "rb") as fh:
-			content = fh.read()
-
-		file_doc = frappe.utils.file_manager.save_file(
-			filename,
-			content,
-			"Cutting Job",
-			self.name,
-			is_private=1,
-		)
-		return file_doc.file_url
-
-	# Fixed column schema for headerless COP stock files (stock_pre.xlsx).
-	# COP rejects files containing a header row, so we generate them headerless
-	# and supply this schema when reading them back.
-	_COP_STOCK_HEADERS = ["#", "Length", "Width", "Quantity", "Material", "Texture", "Label", "Price"]
-
-	def _load_excel_rows(self, file_url: str, has_header: bool = True):
-		"""
-		Load rows from an attached Excel file.
-
-		Uses the private-files path; file_url is the Frappe file URL
-		(e.g. /private/files/foo.xlsx).
-
-		has_header=False is for files COP requires to be headerless
-		(stock_pre.xlsx). The fixed `_COP_STOCK_HEADERS` schema is used instead.
-		"""
-		filename = file_url.split("/")[-1]
-		file_path = frappe.utils.get_site_path("private", "files", filename)
-		wb = load_workbook(file_path, data_only=True)
-		ws = wb.active
-
-		rows = []
-		headers = None if has_header else list(self._COP_STOCK_HEADERS)
-		for row_idx, row in enumerate(ws.iter_rows(values_only=True)):
-			if has_header and row_idx == 0:
-				headers = [str(h) if h is not None else "" for h in row]
-				continue
-			if not any(row):
-				break
-			rows.append(dict(zip(headers, row)))
-
-		return rows
-
-	def _compute_scrap_area(self, consumed, remnants, sheets) -> float:
-		consumed_area = sum((l * w / 1e6) * q for _, l, w, q in consumed)
-		piece_area = sum(
-			piece["length"] * piece["width"] / 1e6
-			for sheet in sheets
-			for piece in sheet["pieces"]
-		)
-		remnant_area = sum((l * w / 1e6) * q for _, l, w, q in remnants)
-		return max(0.0, consumed_area - piece_area - remnant_area)
-
-	def _create_delivery_notes(self):
-		"""
-		Create one draft Delivery Note per linked SO via ERPNext's own mapper.
-		Returns a list of DN names.
-		"""
-		from erpnext.selling.doctype.sales_order.sales_order import make_delivery_note
-
-		dn_names = []
-		for so_link in self.linked_sales_orders or []:
-			so_name = so_link.sales_order if hasattr(so_link, "sales_order") else so_link.get("sales_order")
-			if not so_name:
-				continue
-			try:
-				dn = make_delivery_note(so_name)
-				dn.insert(ignore_permissions=True)
-				dn_names.append(dn.name)
-			except Exception:
-				frappe.log_error(frappe.get_traceback(), f"DN creation failed for SO {so_name}")
-
-		return dn_names
+def _raw_warehouse():
+	if frappe.db.exists("DocType", "Glass Factory Settings"):
+		return frappe.db.get_single_value("Glass Factory Settings", "raw_warehouse")
+	return None

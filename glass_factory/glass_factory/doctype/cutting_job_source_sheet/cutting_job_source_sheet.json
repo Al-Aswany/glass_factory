@@ -5,61 +5,39 @@
  "engine": "InnoDB",
  "field_order": [
   "item_code",
+  "source_role",
+  "warehouse",
   "serial_no",
   "length_mm",
-  "width_mm"
+  "width_mm",
+  "qty_consumed",
+  "remnant_item",
+  "remnant_length_mm",
+  "remnant_width_mm",
+  "remnant_qty",
+  "scrap_qty"
  ],
  "fields": [
-  {
-   "fieldname": "item_code",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Item Code",
-   "options": "Item",
-   "reqd": 1
-  },
-  {
-   "fieldname": "serial_no",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Serial No",
-   "options": "Serial No",
-   "reqd": 1
-  },
-  {
-   "fieldname": "length_mm",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Length (mm)",
-   "read_only": 1
-  },
-  {
-   "fieldname": "width_mm",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Width (mm)",
-   "read_only": 1
-  }
+  {"fieldname": "item_code", "fieldtype": "Link", "in_list_view": 1, "label": "Source Item", "options": "Item", "reqd": 1},
+  {"fieldname": "source_role", "fieldtype": "Select", "in_list_view": 1, "label": "Source Role", "options": "Raw Sheet\nRemnant", "reqd": 1},
+  {"fieldname": "warehouse", "fieldtype": "Link", "in_list_view": 1, "label": "Warehouse", "options": "Warehouse"},
+  {"fieldname": "serial_no", "fieldtype": "Link", "label": "Serial No", "options": "Serial No"},
+  {"fieldname": "length_mm", "fieldtype": "Float", "label": "Length (mm)"},
+  {"fieldname": "width_mm", "fieldtype": "Float", "label": "Width (mm)"},
+  {"default": "1", "fieldname": "qty_consumed", "fieldtype": "Float", "in_list_view": 1, "label": "Qty Consumed", "reqd": 1},
+  {"fieldname": "remnant_item", "fieldtype": "Link", "label": "Remnant Item", "options": "Item"},
+  {"fieldname": "remnant_length_mm", "fieldtype": "Float", "label": "Remnant Length (mm)"},
+  {"fieldname": "remnant_width_mm", "fieldtype": "Float", "label": "Remnant Width (mm)"},
+  {"fieldname": "remnant_qty", "fieldtype": "Float", "label": "Remnant Qty"},
+  {"fieldname": "scrap_qty", "fieldtype": "Float", "label": "Scrap Qty"}
  ],
  "istable": 1,
- "modified": "2026-04-28 01:00:00.000000",
+ "modified": "2026-06-07 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Cutting Job Source Sheet",
  "owner": "Administrator",
+ "permissions": [],
  "sort_order": 50,
- "track_changes": 1,
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ]
+ "track_changes": 1
 }

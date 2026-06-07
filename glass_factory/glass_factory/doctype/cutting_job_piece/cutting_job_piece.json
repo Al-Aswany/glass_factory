@@ -4,82 +4,48 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "parent_item",
+  "sales_order",
+  "sales_order_item",
+  "customer",
+  "raw_sheet_item",
+  "cut_wip_item",
+  "final_item",
   "length_mm",
   "width_mm",
-  "qty",
-  "label",
-  "customer_name",
-  "sales_order",
-  "sales_order_item"
+  "thickness_mm",
+  "processing_flags",
+  "glass_specification",
+  "qty_required",
+  "qty_assigned",
+  "qty_cut",
+  "target_warehouse",
+  "basic_rate"
  ],
  "fields": [
-  {
-   "fieldname": "parent_item",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Parent Item",
-   "options": "Item"
-  },
-  {
-   "fieldname": "length_mm",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Length (mm)"
-  },
-  {
-   "fieldname": "width_mm",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Width (mm)"
-  },
-  {
-   "fieldname": "qty",
-   "fieldtype": "Int",
-   "in_list_view": 1,
-   "label": "Quantity"
-  },
-  {
-   "fieldname": "label",
-   "fieldtype": "Data",
-   "label": "Label"
-  },
-  {
-   "fieldname": "customer_name",
-   "fieldtype": "Data",
-   "label": "Customer Name"
-  },
-  {
-   "fieldname": "sales_order",
-   "fieldtype": "Link",
-   "label": "Sales Order",
-   "options": "Sales Order"
-  },
-  {
-   "fieldname": "sales_order_item",
-   "fieldtype": "Data",
-   "label": "Sales Order Item (Row Index)"
-  }
+  {"fieldname": "sales_order", "fieldtype": "Link", "in_list_view": 1, "label": "Sales Order", "options": "Sales Order", "reqd": 1},
+  {"fieldname": "sales_order_item", "fieldtype": "Data", "in_list_view": 1, "label": "Sales Order Item Row", "reqd": 1},
+  {"fieldname": "customer", "fieldtype": "Link", "label": "Customer", "options": "Customer"},
+  {"fieldname": "raw_sheet_item", "fieldtype": "Link", "label": "Raw Sheet Item", "options": "Item", "reqd": 1},
+  {"fieldname": "cut_wip_item", "fieldtype": "Link", "in_list_view": 1, "label": "Cut WIP Item", "options": "Item", "reqd": 1},
+  {"fieldname": "final_item", "fieldtype": "Link", "in_list_view": 1, "label": "Final Item", "options": "Item", "reqd": 1},
+  {"fieldname": "length_mm", "fieldtype": "Float", "in_list_view": 1, "label": "Length (mm)", "reqd": 1},
+  {"fieldname": "width_mm", "fieldtype": "Float", "in_list_view": 1, "label": "Width (mm)", "reqd": 1},
+  {"fieldname": "thickness_mm", "fieldtype": "Float", "label": "Thickness (mm)", "reqd": 1},
+  {"fieldname": "processing_flags", "fieldtype": "Data", "label": "Processing Flags"},
+  {"fieldname": "glass_specification", "fieldtype": "Data", "label": "Glass Specification"},
+  {"fieldname": "qty_required", "fieldtype": "Float", "in_list_view": 1, "label": "Qty Required", "reqd": 1},
+  {"fieldname": "qty_assigned", "fieldtype": "Float", "in_list_view": 1, "label": "Qty Assigned"},
+  {"fieldname": "qty_cut", "fieldtype": "Float", "in_list_view": 1, "label": "Qty Cut"},
+  {"fieldname": "target_warehouse", "fieldtype": "Link", "label": "Target Warehouse", "options": "Warehouse"},
+  {"fieldname": "basic_rate", "fieldtype": "Currency", "label": "Basic Rate"}
  ],
  "istable": 1,
- "modified": "2026-04-28 01:00:00.000000",
+ "modified": "2026-06-07 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Cutting Job Piece",
  "owner": "Administrator",
+ "permissions": [],
  "sort_order": 50,
- "track_changes": 1,
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  }
- ]
+ "track_changes": 1
 }

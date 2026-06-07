@@ -23,10 +23,11 @@ def execute(filters=None):
 
 	job = frappe.get_doc("Cutting Job", job_name)
 
-	if not job.tabular_files:
+	tabular_files = _tabular_cop_files(job)
+	if not tabular_files:
 		return _empty_state(
 			"This Cutting Job has no tabular layout files attached yet. "
-			"Run the optimizer or attach the Pieces XLSX outputs to render the layout."
+			"Run the optimizer or attach COP Tabular XLSX outputs to render the layout."
 		)
 
 	sheets_data = _load_all_sheets(job)
@@ -56,10 +57,22 @@ def _empty_state(msg):
 # Data loading
 # ---------------------------------------------------------------------------
 
+def _tabular_cop_files(job):
+	"""Return COP tabular files attached to the Cutting Job."""
+	files = list(job.cop_files or [])
+
+	return [
+		row
+		for row in files
+		if row.attached_file
+		and (not getattr(row, "file_type", None) or str(row.file_type).lower() == "tabular")
+	]
+
+
 def _load_all_sheets(job) -> Dict[int, List[Dict]]:
 	"""Load every tabular file and group rows by sheet index."""
 	sheets_data: Dict[int, List[Dict]] = defaultdict(list)
-	for tf in job.tabular_files:
+	for tf in _tabular_cop_files(job):
 		try:
 			rows = _load_excel_rows(tf.attached_file)
 		except Exception as e:  # noqa: BLE001
