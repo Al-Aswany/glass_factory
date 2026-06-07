@@ -157,6 +157,7 @@ def ensure_final_item(raw_doc, spec: GlassSpec) -> str:
 
 
 def ensure_remnant_item(base_item, length_mm: float, width_mm: float) -> str:
+	base_doc = frappe.get_doc("Item", base_item)
 	base_parsed = _parse_raw_item_code(base_item)
 	spec = GlassSpec(
 		_code_part(base_parsed.get("base_glass_type") or "GLASS"),

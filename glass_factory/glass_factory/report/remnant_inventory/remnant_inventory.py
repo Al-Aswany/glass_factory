@@ -1,13 +1,12 @@
 """Remnant Inventory query report."""
-import re
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
-
-REM_DIM_RE = re.compile(r"-REM-(\d+)x(\d+)", re.IGNORECASE)
+from glass_factory.glass_factory.item_resolver import _parse_raw_item_code
 
 
 def execute(filters=None):
@@ -63,10 +62,10 @@ def _data(filters: Dict) -> List[Dict]:
 	min_area = float(filters.get("min_area_m2") or 0)
 	include_empty = bool(filters.get("include_zero_stock"))
 
-	# Pull all remnant items in one query
-	item_filters = [["item_code", "like", "%-REM-%"]]
+	# Pull all remnant items in one query (e.g. GLS-CLEAR-8MM-1500X900-REM)
+	item_filters = {"gf_glass_item_role": "Remnant"}
 	if parent_filter:
-		item_filters.append(["item_code", "like", f"{parent_filter}%"])
+		item_filters["item_code"] = ["like", f"{parent_filter}%"]
 
 	items = frappe.db.get_list(
 		"Item",
@@ -155,16 +154,17 @@ def _make_row(item, length, width, area_m2, qty, warehouse, val_rate, stock_valu
 
 
 def _parse_dimensions(item_code: str) -> Tuple[int, int]:
-	m = REM_DIM_RE.search(item_code)
-	if not m:
+	parsed = _parse_raw_item_code(item_code)
+	if not parsed:
 		return 0, 0
-	return int(m.group(1)), int(m.group(2))
+	return int(flt(parsed["length_mm"])), int(flt(parsed["width_mm"]))
 
 
 def _parent_code(item_code: str) -> str:
-	if "-REM-" in item_code:
-		return item_code.split("-REM-")[0]
-	return item_code
+	code = item_code or ""
+	if code.upper().endswith("-REM"):
+		return code[:-4]
+	return code
 
 
 def _size_bucket(area_m2: float) -> str:
