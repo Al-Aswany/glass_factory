@@ -118,6 +118,7 @@ class CuttingJob(Document):
 			frappe.throw("Submit Repack #1 before creating a Glass Processing Job.")
 		job = frappe.new_doc("Glass Processing Job")
 		job.cutting_job = self.name
+		job.company = job.company or self.company
 		job.status = "Ready for Processing"
 		for piece in self.pieces:
 			qty = flt(piece.get("qty_cut") or piece.get("qty_required"))

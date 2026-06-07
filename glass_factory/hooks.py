@@ -1,7 +1,7 @@
 app_name = "glass_factory"
 app_title = "Glass Factory"
 app_publisher = "Mahmoud Hussein"
-app_description = "app for Glass Factory"
+app_description = "Glass cutting, processing, and inventory for ERPNext"
 app_email = "mahmudhussain2001ab@gmail.com"
 app_license = "mit"
 
@@ -13,15 +13,14 @@ fixtures = []
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "glass_factory",
-# 		"logo": "/assets/glass_factory/logo.png",
-# 		"title": "Glass Factory",
-# 		"route": "/glass_factory",
-# 		"has_permission": "glass_factory.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "glass_factory",
+		"title": "Glass Factory",
+		"route": "/app/glass-factory",
+		"has_permission": "glass_factory.glass_factory.permissions.has_app_permission",
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -160,6 +159,7 @@ doc_events = {
 		"on_submit": "glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
 	},
 	"Stock Entry": {
+		"before_validate": "glass_factory.glass_factory.stock_entry_hooks.prepare_glass_stock_entry",
 		"validate": "glass_factory.glass_factory.selling_validations.validate_stock_entry",
 	},
 	"Serial No": {

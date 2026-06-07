@@ -34,9 +34,24 @@ class TestManualMVPContract(unittest.TestCase):
 			"glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
 		)
 		self.assertEqual(
+			hooks.doc_events["Stock Entry"]["before_validate"],
+			"glass_factory.glass_factory.stock_entry_hooks.prepare_glass_stock_entry",
+		)
+		self.assertEqual(
 			hooks.doc_events["Stock Entry"]["validate"],
 			"glass_factory.glass_factory.selling_validations.validate_stock_entry",
 		)
+
+	def test_job_doctypes_use_glass_naming_series(self):
+		for doctype, expected_series in (
+			("Cutting Job", "GF-CUT-.YYYY.-"),
+			("Glass Processing Job", "GF-PROC-.YYYY.-"),
+		):
+			meta = frappe.get_meta(doctype)
+			self.assertEqual(meta.autoname, "naming_series:")
+			series_field = meta.get_field("naming_series")
+			self.assertIsNotNone(series_field, doctype)
+			self.assertIn(expected_series, series_field.options.split("\n"))
 
 	def test_phase0_doctypes_exist_after_migrate(self):
 		for doctype in (
