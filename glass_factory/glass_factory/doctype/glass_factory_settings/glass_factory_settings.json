@@ -36,6 +36,7 @@
  ],
  "fields": [
   {
+   "description": "Required for cutting and processing stock movements: Raw, Cut WIP, Final Goods, Remnants, and Scrap warehouses (created automatically on install/migrate).",
    "fieldname": "warehouses_section",
    "fieldtype": "Section Break",
    "label": "Warehouses"
@@ -90,8 +91,8 @@
    "options": "Item Group"
   },
   {
-   "default": "CLEAR",
-   "description": "One glass type code per line. These are the only type codes allowed in GLS-* Item codes.",
+   "default": "CLEAR\nBRONZE\nTINTED",
+   "description": "One glass type code per line (for example CLEAR, BRONZE, TINTED). These are the only type codes allowed in GLS-* Item codes.",
    "fieldname": "allowed_glass_types",
    "fieldtype": "Small Text",
    "label": "Allowed Glass Types"

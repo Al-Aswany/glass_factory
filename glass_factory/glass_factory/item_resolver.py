@@ -37,6 +37,10 @@ def resolve_row_items(row) -> dict[str, str | float]:
 	if not cint(row.get("gf_is_glass_item")):
 		return {}
 
+	from glass_factory.glass_factory.settings_validation import require_runtime_setup
+
+	require_runtime_setup(scope="items")
+
 	raw_item = row.get("gf_raw_sheet_item") or row.get("item_code")
 	if not raw_item:
 		frappe.throw(f"Row {row.idx}: Raw Sheet Item is required for glass items.")

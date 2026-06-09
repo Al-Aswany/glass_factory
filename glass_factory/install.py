@@ -1,6 +1,8 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
+from glass_factory.glass_factory.settings_validation import DEMO_ALLOWED_GLASS_TYPES
+
 
 GLASS_ROLES = [
 	"Glass Sales User",
@@ -222,7 +224,7 @@ def seed_glass_factory_settings(abbr):
 	settings.scrap_item_group = settings.scrap_item_group or "Glass Scrap"
 	settings.scrap_item = settings.scrap_item or _ensure_scrap_item()
 	if hasattr(settings, "allowed_glass_types") and not settings.allowed_glass_types:
-		settings.allowed_glass_types = "CLEAR"
+		settings.allowed_glass_types = DEMO_ALLOWED_GLASS_TYPES
 	settings.min_remnant_area_m2 = settings.min_remnant_area_m2 or 0.1
 	settings.min_remnant_side_mm = settings.min_remnant_side_mm or 100
 	settings.min_chargeable_area_m2 = settings.min_chargeable_area_m2 or 0.05

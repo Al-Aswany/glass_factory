@@ -12,4 +12,5 @@ glass_factory.patches.v0_0.cleanup_item_custom_fields
 glass_factory.patches.v0_0.setup_item_glass_readonly_fields
 glass_factory.patches.v0_0.setup_glass_piece_pricing
 glass_factory.patches.v0_0.setup_controlled_glass_types_and_workflow_links
+glass_factory.patches.v0_0.setup_uat_demo_hardening
 # Patches added in this section will be executed after doctypes are migrated

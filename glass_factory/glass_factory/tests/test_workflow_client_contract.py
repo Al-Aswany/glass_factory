@@ -22,7 +22,19 @@ class TestWorkflowClientContract(unittest.TestCase):
 
 	def test_processing_job_actions_are_loaded_dynamically(self):
 		script = (APP_ROOT / "glass_factory/doctype/glass_processing_job/glass_processing_job.js").read_text()
+		self.assertIn('frm.doc.docstatus !== 1', script)
 		self.assertIn('frm.call("get_valid_actions")', script)
 		self.assertIn('frm.call("run_action"', script)
 		self.assertNotIn('Create Repack', script)
 		self.assertNotIn('Submit Repack', script)
+
+	def test_sales_order_cutting_job_hidden_before_submit(self):
+		script = (APP_ROOT / "public/js/sales_order_glass.js").read_text()
+		self.assertIn('if (frm.doc.docstatus !== 1) return', script)
+		self.assertIn('__("Cutting Job")', script)
+
+	def test_quotation_item_grid_locks_generated_rows(self):
+		script = (APP_ROOT / "public/js/quotation_glass.js").read_text()
+		self.assertIn("GF_ITEM_LOCKED_FIELDS", script)
+		self.assertIn('GF_ITEM_RATE_FIELDS.forEach', script)
+		self.assertIn('items_grid.cannot_add_rows = has_glass', script)

@@ -13,6 +13,7 @@ from glass_factory.glass_factory.item_resolver import (
 	get_scrap_item,
 	item_role,
 )
+from glass_factory.glass_factory.settings_validation import get_validated_stock_settings
 
 
 def build_cutting_repack(cutting_job):
@@ -200,16 +201,7 @@ def _validate_processing_job(processing_job):
 
 
 def _settings():
-	if not frappe.db.exists("DocType", "Glass Factory Settings"):
-		frappe.throw("Configure Glass Factory Settings before posting glass stock entries.")
-	settings = frappe.get_single("Glass Factory Settings")
-	return frappe._dict({
-		"raw_warehouse": settings.raw_warehouse,
-		"cut_wip_warehouse": settings.cut_wip_warehouse,
-		"final_goods_warehouse": settings.final_goods_warehouse,
-		"remnants_warehouse": settings.remnants_warehouse,
-		"scrap_warehouse": settings.scrap_warehouse,
-	})
+	return get_validated_stock_settings()
 
 
 def _company_from_job(cutting_job):

@@ -7,6 +7,7 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 from glass_factory.glass_factory.item_resolver import get_item_glass_meta, item_role
+from glass_factory.glass_factory.settings_validation import get_raw_warehouse
 from glass_factory.glass_factory.stock_posting import build_cutting_repack
 
 
@@ -308,6 +309,4 @@ def make_cutting_job(source_name, target_doc=None):
 
 
 def _raw_warehouse():
-	if frappe.db.exists("DocType", "Glass Factory Settings"):
-		return frappe.db.get_single_value("Glass Factory Settings", "raw_warehouse")
-	return None
+	return get_raw_warehouse()

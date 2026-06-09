@@ -49,5 +49,6 @@ class TestGlassItemResolver(unittest.TestCase):
 	def test_validate_glass_type_uses_predefined_setup(self):
 		with patch("glass_factory.glass_factory.item_resolver._settings_value", return_value="CLEAR\nBRONZE"):
 			validate_glass_type("clear")
-			with self.assertRaises(frappe.ValidationError):
+			with self.assertRaises(frappe.ValidationError) as ctx:
 				validate_glass_type("BLUE")
+			self.assertIn("Allowed glass types: CLEAR, BRONZE", str(ctx.exception))
