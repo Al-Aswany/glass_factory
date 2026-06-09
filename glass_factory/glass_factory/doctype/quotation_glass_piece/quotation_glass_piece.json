@@ -9,6 +9,9 @@
   "width_mm",
   "thickness_mm",
   "qty",
+  "section_pricing",
+  "glass_rate",
+  "processing_rate",
   "rate",
   "section_processing",
   "process_polish",
@@ -61,10 +64,30 @@
    "reqd": 1
   },
   {
+   "fieldname": "section_pricing",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "fieldname": "glass_rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Glass Rate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processing_rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Processing Rate",
+   "read_only": 1
+  },
+  {
    "fieldname": "rate",
    "fieldtype": "Currency",
    "in_list_view": 1,
-   "label": "Rate"
+   "label": "Total Rate",
+   "read_only": 1
   },
   {
    "fieldname": "section_processing",
@@ -78,10 +101,22 @@
    "label": "Polish"
   },
   {
+   "fieldname": "polish_rate",
+   "fieldtype": "Currency",
+   "label": "Polish Rate",
+   "read_only": 1
+  },
+  {
    "default": "0",
    "fieldname": "process_bevel",
    "fieldtype": "Check",
    "label": "Bevel"
+  },
+  {
+   "fieldname": "bevel_rate",
+   "fieldtype": "Currency",
+   "label": "Bevel Rate",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -90,10 +125,22 @@
    "label": "Holes / Drilling"
   },
   {
+   "fieldname": "holes_rate",
+   "fieldtype": "Currency",
+   "label": "Holes Rate",
+   "read_only": 1
+  },
+  {
    "default": "0",
    "fieldname": "process_slots",
    "fieldtype": "Check",
    "label": "Slots"
+  },
+  {
+   "fieldname": "slots_rate",
+   "fieldtype": "Currency",
+   "label": "Slots Rate",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -102,16 +149,34 @@
    "label": "Tempered"
   },
   {
+   "fieldname": "temper_rate",
+   "fieldtype": "Currency",
+   "label": "Tempered Rate",
+   "read_only": 1
+  },
+  {
    "default": "0",
    "fieldname": "process_sandblast",
    "fieldtype": "Check",
    "label": "Sandblast"
   },
   {
+   "fieldname": "sandblast_rate",
+   "fieldtype": "Currency",
+   "label": "Sandblast Rate",
+   "read_only": 1
+  },
+  {
    "default": "0",
    "fieldname": "process_laminate",
    "fieldtype": "Check",
    "label": "Laminated"
+  },
+  {
+   "fieldname": "laminate_rate",
+   "fieldtype": "Currency",
+   "label": "Laminated Rate",
+   "read_only": 1
   },
   {
    "fieldname": "section_resolved",

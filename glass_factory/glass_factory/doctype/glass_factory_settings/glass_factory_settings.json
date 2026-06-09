@@ -23,7 +23,15 @@
   "min_remnant_area_m2",
   "min_remnant_side_mm",
   "min_chargeable_area_m2",
-  "enable_cop"
+  "enable_cop",
+  "pricing_section",
+  "polish_rate_per_m2",
+  "bevel_rate_per_m2",
+  "holes_rate_per_m2",
+  "slots_rate_per_m2",
+  "temper_rate_per_m2",
+  "sandblast_rate_per_m2",
+  "laminate_rate_per_m2"
  ],
  "fields": [
   {
@@ -144,6 +152,53 @@
    "fieldname": "enable_cop",
    "fieldtype": "Check",
    "label": "Enable COP"
+  },
+  {
+   "fieldname": "pricing_section",
+   "fieldtype": "Section Break",
+   "label": "Processing Rates"
+  },
+  {
+   "default": "0",
+   "fieldname": "polish_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Polish Rate (per m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "bevel_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Bevel Rate (per m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "holes_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Holes / Drilling Rate (per m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "slots_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Slots Rate (per m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "temper_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Tempered Rate (per m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "sandblast_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Sandblast Rate (per m²)"
+  },
+  {
+   "default": "0",
+   "fieldname": "laminate_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Laminated Rate (per m²)"
   }
  ],
  "issingle": 1,

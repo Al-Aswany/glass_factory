@@ -10,4 +10,5 @@ glass_factory.patches.v0_0.setup_quotation_glass_pieces
 glass_factory.patches.v0_0.remove_legacy_glass_doctypes
 glass_factory.patches.v0_0.cleanup_item_custom_fields
 glass_factory.patches.v0_0.setup_item_glass_readonly_fields
+glass_factory.patches.v0_0.setup_glass_piece_pricing
 # Patches added in this section will be executed after doctypes are migrated

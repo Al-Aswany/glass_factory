@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import frappe
+from frappe.model.document import Document
 from frappe.utils import cint, flt
 
 from glass_factory.glass_factory.item_resolver import PROCESS_ORDER, get_item_glass_meta, resolve_row_items
+from glass_factory.glass_factory.piece_pricing import apply_piece_rates, calculate_piece_rates
 
 PIECE_FLAG_FIELDS = (
 	("process_polish", "POL"),
@@ -34,9 +36,12 @@ def sync_glass_pieces_to_items(doc, method=None):
 	]
 	synced_rows = []
 
+	price_list, company = _quotation_pricing_context(doc)
+
 	for piece in glass_pieces:
 		_validate_piece(piece)
 		source_id = piece.name or f"new-{piece.idx}"
+		_apply_rates_to_piece(piece, price_list=price_list, company=company)
 
 		row_data = _build_item_row(doc, piece, source_id)
 		piece.area_m2 = row_data["gf_area_m2"]
@@ -84,7 +89,7 @@ def _build_item_row(doc, piece, source_id: str) -> dict:
 	resolve_row_items(resolved)
 
 	item = frappe.get_doc("Item", resolved.item_code)
-	rate = flt(piece.rate) or flt(item.standard_rate) or 0
+	rate = flt(piece.rate)
 
 	return {
 		"gf_is_glass_item": 1,
@@ -114,7 +119,7 @@ def quotation_has_glass_pieces(doc) -> bool:
 
 
 @frappe.whitelist()
-def build_quotation_items_from_glass(glass_pieces, manual_items=None):
+def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None):
 	"""Build Quotation Item rows from glass pieces for client-side pre-save sync."""
 	glass_pieces = frappe.parse_json(glass_pieces)
 	manual_items = frappe.parse_json(manual_items) if manual_items else []
@@ -126,6 +131,7 @@ def build_quotation_items_from_glass(glass_pieces, manual_items=None):
 		piece = frappe._dict(piece)
 		_validate_piece(piece)
 		source_id = piece.name or f"new-{piece.idx}"
+		_apply_rates_to_piece(piece, price_list=price_list, company=company)
 		row_data = _build_item_row(None, piece, source_id)
 		synced_rows.append(row_data)
 		updated_pieces.append({
@@ -139,3 +145,28 @@ def build_quotation_items_from_glass(glass_pieces, manual_items=None):
 		"items": manual_items + synced_rows,
 		"glass_pieces": updated_pieces,
 	}
+
+
+@frappe.whitelist()
+def calculate_glass_piece_rates(glass_pieces, price_list=None, company=None):
+	"""Recalculate glass piece rates for client-side grid updates."""
+	glass_pieces = frappe.parse_json(glass_pieces)
+	return [
+		apply_piece_rates(piece, price_list=price_list, company=company)
+		for piece in glass_pieces
+	]
+
+
+def _apply_rates_to_piece(piece, price_list=None, company=None) -> None:
+	rates = calculate_piece_rates(piece, price_list=price_list, company=company)
+	if isinstance(piece, Document):
+		for fieldname, value in rates.items():
+			piece.set(fieldname, value)
+	else:
+		piece.update(rates)
+
+
+def _quotation_pricing_context(doc):
+	if not doc:
+		return None, None
+	return doc.get("selling_price_list"), doc.get("company")
