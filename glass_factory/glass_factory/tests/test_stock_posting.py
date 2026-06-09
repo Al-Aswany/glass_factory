@@ -69,3 +69,34 @@ class TestStockPosting(IntegrationTestCase):
 		self.assertAlmostEqual(remnant_row.basic_amount, flt(remnant_row.basic_rate) * flt(remnant_row.transfer_qty), places=2)
 		self.assertTrue(cut_row.set_basic_rate_manually)
 		self.assertTrue(remnant_row.set_basic_rate_manually)
+
+	def test_cutting_job_is_copied_to_stock_entry_detail_rows(self):
+		from glass_factory.glass_factory.stock_posting import build_cutting_repack
+
+		cutting_job = frappe._dict(
+			name="CJ-TRACE-001",
+			source_sheets=[
+				frappe._dict(idx=1, item_code="RAW-GLASS", warehouse="Stores - _TC", qty_consumed=1, source_role="Raw Sheet"),
+			],
+			pieces=[
+				frappe._dict(
+					idx=1,
+					cut_wip_item="CUT-GLASS",
+					sales_order="SO-TRACE-001",
+					sales_order_item="SOI-TRACE-001",
+					glass_specification="CLEAR|8|500|300|CUT",
+					qty_required=1,
+					qty_cut=1,
+				),
+			],
+		)
+
+		with patch("glass_factory.glass_factory.stock_posting._settings", return_value=frappe._dict({"raw_warehouse": "Stores - _TC", "cut_wip_warehouse": "WIP - _TC"})), \
+			patch("glass_factory.glass_factory.stock_posting._company_from_job", return_value="_Test Company"), \
+			patch("glass_factory.glass_factory.stock_posting.item_role", side_effect=lambda item: "Raw Sheet" if item == "RAW-GLASS" else "Cut WIP"), \
+			patch("glass_factory.glass_factory.stock_posting._stock_uom", return_value="Nos"), \
+			patch("glass_factory.glass_factory.stock_posting._allocate_cutting_repack_rates"):
+			se = build_cutting_repack(cutting_job)
+
+		self.assertTrue(se.items)
+		self.assertTrue(all(row.gf_cutting_job == cutting_job.name for row in se.items))

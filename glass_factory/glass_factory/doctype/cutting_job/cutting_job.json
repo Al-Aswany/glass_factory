@@ -20,6 +20,7 @@
   "cop_files",
   "section_links",
   "linked_stock_entry",
+  "linked_processing_job",
   "remarks",
   "amended_from"
  ],
@@ -43,7 +44,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Draft\nPlanned\nReady for Cutting\nCutting In Progress\nCut Stock Posted\nCompleted\nCancelled",
+   "options": "Draft\nPlanned\nReady for Cutting\nCutting In Progress\nCut Stock Posted\nProcessing Started\nCompleted\nCancelled",
    "reqd": 1
   },
   {
@@ -107,8 +108,16 @@
    "allow_on_submit": 1,
    "fieldname": "linked_stock_entry",
    "fieldtype": "Link",
-   "label": "Repack #1 Stock Entry",
+   "label": "Cutting Stock Movement",
    "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "linked_processing_job",
+   "fieldtype": "Link",
+   "label": "Glass Processing Job",
+   "options": "Glass Processing Job",
    "read_only": 1
   },
   {
@@ -134,10 +143,53 @@
  "name": "Cutting Job",
  "owner": "Administrator",
  "permissions": [
-  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1},
-  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Manager", "share": 1, "submit": 1, "write": 1},
-  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Production Planner", "share": 1, "write": 1},
-  {"email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Cutting Operator", "share": 1, "write": 1}
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Production Planner",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Cutting Operator",
+   "share": 1,
+   "write": 1
+  }
  ],
  "search_fields": "status,company",
  "show_name_in_global_search": 1,

@@ -11,6 +11,7 @@ from frappe.utils import cint, flt
 
 PROCESS_ORDER = ("POL", "BEV", "HOL", "SLT", "TMP", "SBL", "LAM")
 VALID_ROLES = ("Raw Sheet", "Cut WIP", "Final", "Remnant", "Scrap")
+DEFAULT_GLASS_TYPES = ("CLEAR",)
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ def spec_from_row(row, raw_doc=None) -> GlassSpec:
 			f"Row {row.idx}: Base glass type must be encoded in the raw sheet Item code "
 			f"(for example GLS-CLEAR-8MM-3210X2250)."
 		)
+	validate_glass_type(base_type, context=f"Row {row.idx}")
 	if thickness <= 0:
 		frappe.throw(f"Row {row.idx}: Thickness must be greater than zero.")
 	if length <= 0 or width <= 0:
@@ -123,6 +125,7 @@ def parse_processing_flags(value) -> tuple[str, ...]:
 
 
 def ensure_raw_sheet_item(base_glass_type: str, thickness_mm: float, length_mm: float, width_mm: float) -> str:
+	validate_glass_type(base_glass_type, context="Raw sheet Item")
 	spec = GlassSpec(_code_part(base_glass_type), thickness_mm, length_mm, width_mm, ())
 	item_code = _raw_item_code(spec)
 	return _ensure_item(
@@ -303,6 +306,7 @@ def spec_from_item_code(item_code: str) -> GlassSpec:
 	parsed = _parse_raw_item_code(item_code)
 	if not parsed:
 		frappe.throw(f"Item {item_code}: cannot parse glass specification from item code.")
+	validate_glass_type(parsed["base_glass_type"], context=f"Item {item_code}")
 	return GlassSpec(
 		_code_part(parsed["base_glass_type"]),
 		flt(parsed["thickness_mm"]),
@@ -361,6 +365,29 @@ def _validate_role(item, allowed: tuple[str, ...]) -> None:
 		frappe.throw(f"Item {item.name} has glass role {role or 'blank'}, expected one of {', '.join(allowed)}.")
 
 
+@frappe.whitelist()
+def get_allowed_glass_types() -> list[str]:
+	"""Return setup-controlled glass type codes in display order."""
+	raw_value = _settings_value("allowed_glass_types")
+	values = []
+	for token in re.split(r"[\n,;]+", raw_value or ""):
+		code = _code_part(token)
+		if code and code not in values:
+			values.append(code)
+	return values or list(DEFAULT_GLASS_TYPES)
+
+
+def validate_glass_type(value: str, context: str = "Glass type") -> None:
+	code = _code_part(value)
+	allowed = get_allowed_glass_types()
+	if code in allowed:
+		return
+	frappe.throw(
+		f"{context}: glass type {code or 'blank'} is not allowed. "
+		f"Allowed glass types: {', '.join(allowed)}."
+	)
+
+
 def _process_alias(value: str) -> str:
 	text = _code_part(value)
 	aliases = {
@@ -396,5 +423,7 @@ def _fmt_num(value: float) -> str:
 
 def _settings_value(fieldname: str):
 	if frappe.db.exists("DocType", "Glass Factory Settings"):
-		return frappe.db.get_single_value("Glass Factory Settings", fieldname)
+		meta = frappe.get_meta("Glass Factory Settings")
+		if meta.has_field(fieldname):
+			return frappe.db.get_single_value("Glass Factory Settings", fieldname)
 	return None

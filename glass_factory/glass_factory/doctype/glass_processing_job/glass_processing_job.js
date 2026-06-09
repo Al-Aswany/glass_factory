@@ -9,25 +9,24 @@ frappe.ui.form.on("Glass Processing Job", {
 			"Cancelled": "red",
 		};
 		frm.page.set_indicator(frm.doc.status, color_map[frm.doc.status] || "gray");
+		frm.trigger("add_dynamic_actions");
+	},
 
-		if (frm.is_new() || frm.doc.docstatus === 2) return;
+	add_dynamic_actions(frm) {
+		if (frm.doc.docstatus !== 1) return;
 
-		if (!frm.doc.linked_stock_entry) {
-			frm.add_custom_button(__("Create Repack #2"), () => {
-				frm.call("create_repack_stock_entry").then(() => frm.reload_doc());
-			}, __("Actions"));
-		}
-
-		if (frm.doc.linked_stock_entry && frm.doc.status !== "Final Stock Posted") {
-			frm.add_custom_button(__("Submit Repack #2"), () => {
-				frm.call("submit_repack_stock_entry").then(() => frm.reload_doc());
-			}, __("Actions"));
-		}
-
-		if (frm.doc.status === "Final Stock Posted") {
-			frm.add_custom_button(__("Complete Job"), () => {
-				frm.call("complete_job").then(() => frm.reload_doc());
-			}, __("Actions"));
-		}
+		frm.call("get_valid_actions").then(({ message }) => {
+			(message || []).forEach((action) => {
+				frm.add_custom_button(__(action.label), () => {
+					frm.call("run_action", { action: action.action }).then(({ message: result }) => {
+						if (result?.stock_entry) {
+							frappe.set_route("Form", "Stock Entry", result.stock_entry);
+						} else {
+							frm.reload_doc();
+						}
+					});
+				}, __("Actions"));
+			});
+		});
 	},
 });

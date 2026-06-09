@@ -106,6 +106,7 @@ def create_glass_custom_fields():
 				"fieldtype": "Data",
 				"insert_after": "gf_glass_item_role",
 				"read_only": 1,
+				"description": "Allowed glass types are configured in Glass Factory Settings.",
 			},
 			{
 				"fieldname": "gf_thickness_mm",
@@ -129,16 +130,8 @@ def create_glass_custom_fields():
 				"read_only": 1,
 			},
 		],
-		"Quotation": [
-			{"fieldname": "gf_glass_section", "fieldtype": "Section Break", "label": "Glass Pieces", "insert_after": "items"},
-			{
-				"fieldname": "glass_pieces",
-				"fieldtype": "Table",
-				"label": "Glass Pieces",
-				"options": "Quotation Glass Piece",
-				"insert_after": "gf_glass_section",
-			},
-		],
+		"Quotation": _glass_piece_parent_fields(),
+		"Sales Order": _glass_piece_parent_fields(),
 		"Quotation Item": quotation_item_glass_fields,
 		"Sales Order Item": common_selling_fields + [
 			{"fieldname": "gf_cutting_job", "label": "Cutting Job", "fieldtype": "Link", "options": "Cutting Job", "read_only": 1, "insert_after": "gf_source_row_id"},
@@ -155,13 +148,14 @@ def create_glass_custom_fields():
 			{"fieldname": "gf_processing_job", "label": "Glass Processing Job", "fieldtype": "Link", "options": "Glass Processing Job", "read_only": 1, "insert_after": "gf_cutting_job"},
 		],
 		"Stock Entry": [
-			{"fieldname": "gf_cutting_job", "label": "Cutting Job", "fieldtype": "Link", "options": "Cutting Job", "insert_after": "remarks"},
-			{"fieldname": "gf_processing_job", "label": "Glass Processing Job", "fieldtype": "Link", "options": "Glass Processing Job", "insert_after": "gf_cutting_job"},
+			{"fieldname": "gf_cutting_job", "label": "Cutting Job", "fieldtype": "Link", "options": "Cutting Job", "insert_after": "remarks", "allow_on_submit": 1},
+			{"fieldname": "gf_processing_job", "label": "Glass Processing Job", "fieldtype": "Link", "options": "Glass Processing Job", "insert_after": "gf_cutting_job", "allow_on_submit": 1},
 			{"fieldname": "gf_glass_stock_flow", "label": "Glass Stock Flow", "fieldtype": "Select", "options": "\nRaw to Cut WIP\nCut WIP to Final\nRemnant/Scrap", "insert_after": "gf_processing_job"},
 			{"fieldname": "gf_created_by_glass_factory", "label": "Created by Glass Factory", "fieldtype": "Check", "insert_after": "gf_glass_stock_flow"},
 		],
 		"Stock Entry Detail": [
-			{"fieldname": "gf_sales_order", "label": "Sales Order", "fieldtype": "Link", "options": "Sales Order", "insert_after": "item_code"},
+			{"fieldname": "gf_cutting_job", "label": "Cutting Job", "fieldtype": "Link", "options": "Cutting Job", "insert_after": "item_code", "read_only": 1},
+			{"fieldname": "gf_sales_order", "label": "Sales Order", "fieldtype": "Link", "options": "Sales Order", "insert_after": "gf_cutting_job"},
 			{"fieldname": "gf_sales_order_item", "label": "Sales Order Item Row", "fieldtype": "Data", "insert_after": "gf_sales_order"},
 			{"fieldname": "gf_glass_specification", "label": "Glass Specification", "fieldtype": "Data", "insert_after": "gf_sales_order_item"},
 			{"fieldname": "gf_source_item_role", "label": "Source Item Role", "fieldtype": "Select", "options": "\nRaw Sheet\nCut WIP\nFinal\nRemnant\nScrap", "insert_after": "gf_glass_specification"},
@@ -170,6 +164,19 @@ def create_glass_custom_fields():
 
 	create_custom_fields(custom_fields, ignore_validate=True)
 	frappe.db.commit()
+
+
+def _glass_piece_parent_fields():
+	return [
+		{"fieldname": "gf_glass_section", "fieldtype": "Section Break", "label": "Glass Pieces", "insert_after": "items"},
+		{
+			"fieldname": "glass_pieces",
+			"fieldtype": "Table",
+			"label": "Glass Pieces",
+			"options": "Quotation Glass Piece",
+			"insert_after": "gf_glass_section",
+		},
+	]
 
 
 def create_item_groups():
@@ -214,6 +221,8 @@ def seed_glass_factory_settings(abbr):
 	settings.remnant_item_group = settings.remnant_item_group or "Glass Remnants"
 	settings.scrap_item_group = settings.scrap_item_group or "Glass Scrap"
 	settings.scrap_item = settings.scrap_item or _ensure_scrap_item()
+	if hasattr(settings, "allowed_glass_types") and not settings.allowed_glass_types:
+		settings.allowed_glass_types = "CLEAR"
 	settings.min_remnant_area_m2 = settings.min_remnant_area_m2 or 0.1
 	settings.min_remnant_side_mm = settings.min_remnant_side_mm or 100
 	settings.min_chargeable_area_m2 = settings.min_chargeable_area_m2 or 0.05

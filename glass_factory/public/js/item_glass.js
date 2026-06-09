@@ -5,6 +5,7 @@ const GF_ITEM_CODE_HELP = __(
 frappe.ui.form.on("Item", {
 	refresh(frm) {
 		gf_toggle_glass_dimension_fields(frm);
+		gf_set_allowed_glass_types_help(frm);
 		if (frm.doc.item_code) {
 			gf_sync_glass_fields_from_code(frm, { silent: true });
 		}
@@ -55,5 +56,18 @@ function gf_sync_glass_fields_from_code(frm, opts = {}) {
 				message: GF_ITEM_CODE_HELP,
 			});
 		}
+	});
+}
+
+
+function gf_set_allowed_glass_types_help(frm) {
+	frappe.call({
+		method: "glass_factory.glass_factory.item_resolver.get_allowed_glass_types",
+	}).then(({ message }) => {
+		const allowed = (message || []).join(", ");
+		const description = allowed
+			? `${GF_ITEM_CODE_HELP} ${__("Allowed glass types")}: ${allowed}.`
+			: GF_ITEM_CODE_HELP;
+		frm.set_df_property("gf_base_glass_type", "description", description);
 	});
 }

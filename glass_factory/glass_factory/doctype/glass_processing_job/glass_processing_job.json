@@ -103,7 +103,7 @@
    "allow_on_submit": 1,
    "fieldname": "linked_stock_entry",
    "fieldtype": "Link",
-   "label": "Repack #2 Stock Entry",
+   "label": "Final Stock Movement",
    "options": "Stock Entry",
    "read_only": 1
   },
@@ -130,10 +130,53 @@
  "name": "Glass Processing Job",
  "owner": "Administrator",
  "permissions": [
-  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1},
-  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Manager", "share": 1, "submit": 1, "write": 1},
-  {"create": 1, "email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Production Planner", "share": 1, "write": 1},
-  {"email": 1, "export": 1, "print": 1, "read": 1, "role": "Glass Processing Operator", "share": 1, "write": 1}
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Production Planner",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Glass Processing Operator",
+   "share": 1,
+   "write": 1
+  }
  ],
  "search_fields": "status,cutting_job,company",
  "show_name_in_global_search": 1,

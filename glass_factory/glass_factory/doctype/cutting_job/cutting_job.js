@@ -11,6 +11,7 @@ frappe.ui.form.on("Cutting Job", {
 			"Ready for Cutting": "orange",
 			"Cutting In Progress": "orange",
 			"Cut Stock Posted": "green",
+			"Processing Started": "green",
 			"Completed": "green",
 			"Cancelled": "red",
 		};
@@ -18,32 +19,39 @@ frappe.ui.form.on("Cutting Job", {
 	},
 
 	add_custom_buttons(frm) {
-		if (frm.is_new() || frm.doc.docstatus === 2) return;
+		if (frm.doc.docstatus !== 1) return;
 
 		if (!frm.doc.pieces || !frm.doc.pieces.length) {
 			frm.add_custom_button(__("Pull Sales Orders"), () => {
 				frm.call("pull_from_sales_orders").then(() => frm.reload_doc());
 			}, __("Actions"));
+			return;
 		}
 
 		if (!frm.doc.linked_stock_entry) {
-			frm.add_custom_button(__("Create Repack #1"), () => {
+			frm.add_custom_button(__("Create Cutting Stock Movement"), () => {
 				frm.call("create_repack_stock_entry").then(() => frm.reload_doc());
 			}, __("Actions"));
+			return;
 		}
 
-		if (frm.doc.linked_stock_entry && frm.doc.status !== "Cut Stock Posted") {
-			frm.add_custom_button(__("Submit Repack #1"), () => {
+		if (frm.doc.linked_stock_entry && frm.doc.status !== "Cut Stock Posted" && frm.doc.status !== "Processing Started") {
+			frm.add_custom_button(__("Submit Cutting Stock Movement"), () => {
 				frm.call("submit_repack_stock_entry").then(() => frm.reload_doc());
 			}, __("Actions"));
+			return;
 		}
 
-		if (frm.doc.status === "Cut Stock Posted") {
-			frm.add_custom_button(__("Create Processing Job"), () => {
-				frm.call("make_processing_job").then(() => frm.reload_doc());
-			}, __("Actions"));
-			frm.add_custom_button(__("Complete Cutting Job"), () => {
-				frm.call("complete_job").then(() => frm.reload_doc());
+		if (frm.doc.status === "Cut Stock Posted" || frm.doc.status === "Processing Started") {
+			frm.add_custom_button(__("Start Processing"), () => {
+				frm.call("start_processing").then(({ message }) => {
+					const processing_job = message?.processing_job;
+					if (processing_job) {
+						frappe.set_route("Form", "Glass Processing Job", processing_job);
+					} else {
+						frm.reload_doc();
+					}
+				});
 			}, __("Actions"));
 		}
 

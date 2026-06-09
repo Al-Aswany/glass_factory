@@ -13,6 +13,7 @@
   "items_section",
   "default_uom",
   "default_item_group",
+  "allowed_glass_types",
   "raw_item_group",
   "cut_wip_item_group",
   "final_item_group",
@@ -89,6 +90,13 @@
    "options": "Item Group"
   },
   {
+   "default": "CLEAR",
+   "description": "One glass type code per line. These are the only type codes allowed in GLS-* Item codes.",
+   "fieldname": "allowed_glass_types",
+   "fieldtype": "Small Text",
+   "label": "Allowed Glass Types"
+  },
+  {
    "fieldname": "raw_item_group",
    "fieldtype": "Link",
    "label": "Raw Item Group",
@@ -133,7 +141,7 @@
    "default": "0.1",
    "fieldname": "min_remnant_area_m2",
    "fieldtype": "Float",
-   "label": "Min Remnant Area (m²)"
+   "label": "Min Remnant Area (m\u00b2)"
   },
   {
    "default": "100",
@@ -145,7 +153,7 @@
    "default": "0.05",
    "fieldname": "min_chargeable_area_m2",
    "fieldtype": "Float",
-   "label": "Min Chargeable Area (m²)"
+   "label": "Min Chargeable Area (m\u00b2)"
   },
   {
    "default": "0",
@@ -162,43 +170,43 @@
    "default": "0",
    "fieldname": "polish_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Polish Rate (per m²)"
+   "label": "Polish Rate (per m\u00b2)"
   },
   {
    "default": "0",
    "fieldname": "bevel_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Bevel Rate (per m²)"
+   "label": "Bevel Rate (per m\u00b2)"
   },
   {
    "default": "0",
    "fieldname": "holes_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Holes / Drilling Rate (per m²)"
+   "label": "Holes / Drilling Rate (per m\u00b2)"
   },
   {
    "default": "0",
    "fieldname": "slots_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Slots Rate (per m²)"
+   "label": "Slots Rate (per m\u00b2)"
   },
   {
    "default": "0",
    "fieldname": "temper_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Tempered Rate (per m²)"
+   "label": "Tempered Rate (per m\u00b2)"
   },
   {
    "default": "0",
    "fieldname": "sandblast_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Sandblast Rate (per m²)"
+   "label": "Sandblast Rate (per m\u00b2)"
   },
   {
    "default": "0",
    "fieldname": "laminate_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Laminated Rate (per m²)"
+   "label": "Laminated Rate (per m\u00b2)"
   }
  ],
  "issingle": 1,

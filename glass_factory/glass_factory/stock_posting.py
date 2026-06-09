@@ -40,6 +40,7 @@ def build_cutting_repack(cutting_job):
 			frappe.throw(f"Source sheet row {source.idx}: Item must be Raw Sheet or Remnant.")
 		se.append("items", {
 			"item_code": source.item_code,
+			"gf_cutting_job": cutting_job.name,
 			"s_warehouse": source.warehouse or settings.raw_warehouse,
 			"qty": qty,
 			"transfer_qty": qty,
@@ -60,6 +61,7 @@ def build_cutting_repack(cutting_job):
 			frappe.throw(f"Piece row {piece.idx}: Output item must be Cut WIP.")
 		se.append("items", {
 			"item_code": piece.cut_wip_item,
+			"gf_cutting_job": cutting_job.name,
 			"t_warehouse": piece.get("target_warehouse") or settings.cut_wip_warehouse,
 			"qty": qty,
 			"transfer_qty": qty,
@@ -78,6 +80,7 @@ def build_cutting_repack(cutting_job):
 			remnant_item = source.get("remnant_item") or ensure_remnant_item(source.item_code, source.remnant_length_mm, source.remnant_width_mm)
 			se.append("items", {
 				"item_code": remnant_item,
+				"gf_cutting_job": cutting_job.name,
 				"t_warehouse": settings.remnants_warehouse,
 				"qty": flt(source.remnant_qty),
 				"transfer_qty": flt(source.remnant_qty),
@@ -91,6 +94,7 @@ def build_cutting_repack(cutting_job):
 			scrap_item = get_scrap_item()
 			se.append("items", {
 				"item_code": scrap_item,
+				"gf_cutting_job": cutting_job.name,
 				"t_warehouse": settings.scrap_warehouse,
 				"qty": flt(source.scrap_qty),
 				"transfer_qty": flt(source.scrap_qty),
@@ -102,7 +106,7 @@ def build_cutting_repack(cutting_job):
 			})
 
 	if not se.items:
-		frappe.throw("Cutting Repack has no rows to post.")
+		frappe.throw("Cutting stock movement has no rows to post.")
 
 	_allocate_cutting_repack_rates(se, cutting_job)
 	return se
@@ -121,6 +125,7 @@ def build_processing_repack(processing_job):
 	se.posting_date = nowdate()
 	se.posting_time = nowtime()
 	se.gf_processing_job = processing_job.name
+	se.gf_cutting_job = processing_job.get("cutting_job")
 	se.gf_glass_stock_flow = "Cut WIP to Final"
 	se.gf_created_by_glass_factory = 1
 
@@ -132,6 +137,7 @@ def build_processing_repack(processing_job):
 			frappe.throw(f"Input row {row.idx}: source must be Cut WIP.")
 		se.append("items", {
 			"item_code": row.cut_wip_item,
+			"gf_cutting_job": processing_job.get("cutting_job"),
 			"s_warehouse": row.get("warehouse") or settings.cut_wip_warehouse,
 			"qty": qty,
 			"transfer_qty": qty,
@@ -155,6 +161,7 @@ def build_processing_repack(processing_job):
 			frappe.throw(f"Output row {row.idx}: final Item must match the Sales Order Item.")
 		row_data = {
 			"item_code": row.final_item,
+			"gf_cutting_job": processing_job.get("cutting_job"),
 			"t_warehouse": row.get("warehouse") or settings.final_goods_warehouse,
 			"qty": qty,
 			"transfer_qty": qty,
@@ -174,22 +181,22 @@ def build_processing_repack(processing_job):
 		se.append("items", row_data)
 
 	if not se.items:
-		frappe.throw("Processing Repack has no rows to post.")
+		frappe.throw("Final stock movement has no rows to post.")
 	return se
 
 
 def _validate_cutting_job(cutting_job):
 	if not cutting_job.get("source_sheets"):
-		frappe.throw("Add at least one source sheet before creating Repack #1.")
+		frappe.throw("Add at least one source sheet before creating the cutting stock movement.")
 	if not cutting_job.get("pieces"):
-		frappe.throw("Add at least one cutting piece before creating Repack #1.")
+		frappe.throw("Add at least one cutting piece before creating the cutting stock movement.")
 
 
 def _validate_processing_job(processing_job):
 	if not processing_job.get("inputs"):
-		frappe.throw("Add at least one Cut WIP input before creating Repack #2.")
+		frappe.throw("Add at least one Cut WIP input before creating the final stock movement.")
 	if not processing_job.get("outputs"):
-		frappe.throw("Add at least one Final output before creating Repack #2.")
+		frappe.throw("Add at least one Final output before creating the final stock movement.")
 
 
 def _settings():
@@ -279,7 +286,7 @@ def _total_source_cost(se) -> float:
 		if rate <= 0:
 			frappe.throw(
 				f"Stock Entry row {row.idx}: valuation rate is missing for Item {row.item_code} "
-				f"in warehouse {row.s_warehouse}. Receive raw stock or set valuation before Repack #1."
+				f"in warehouse {row.s_warehouse}. Receive raw stock or set valuation before posting the cutting stock movement."
 			)
 		total_source_cost += flt(row.transfer_qty) * rate
 	return total_source_cost
@@ -300,7 +307,7 @@ def _allocate_cutting_repack_rates(se, cutting_job) -> None:
 	allocatable = [row for row in finished_rows if row.item_code != scrap_item]
 
 	if not allocatable:
-		frappe.throw("Cutting Repack has no finished rows to receive source material value.")
+		frappe.throw("Cutting stock movement has no finished rows to receive source material value.")
 
 	unique_allocatable = {row.item_code for row in allocatable}
 	if len(unique_allocatable) == 1 and not scrap_rows and not piece_rate_overrides:

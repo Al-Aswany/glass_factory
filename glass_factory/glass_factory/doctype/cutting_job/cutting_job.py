@@ -87,6 +87,8 @@ class CuttingJob(Document):
 
 	@frappe.whitelist()
 	def create_repack_stock_entry(self):
+		if self.docstatus != 1:
+			frappe.throw("Submit the Cutting Job before creating a stock movement.")
 		if self.linked_stock_entry:
 			return {"stock_entry": self.linked_stock_entry}
 		se = build_cutting_repack(self)
@@ -94,7 +96,7 @@ class CuttingJob(Document):
 		self.linked_stock_entry = se.name
 		self.status = "Ready for Cutting"
 		self.save(ignore_permissions=True)
-		return {"message": "Draft Repack #1 created.", "stock_entry": se.name}
+		return {"message": "Draft cutting stock movement created.", "stock_entry": se.name}
 
 	@frappe.whitelist()
 	def submit_repack_stock_entry(self):
@@ -110,12 +112,19 @@ class CuttingJob(Document):
 				"gf_cut_qty": flt(piece.get("qty_cut") or piece.get("qty_required")),
 			})
 		self.save(ignore_permissions=True)
-		return {"message": "Repack #1 submitted.", "stock_entry": se.name}
+		return {"message": "Cutting stock movement submitted.", "stock_entry": se.name}
 
 	@frappe.whitelist()
 	def make_processing_job(self):
-		if self.status not in ("Cut Stock Posted", "Completed"):
-			frappe.throw("Submit Repack #1 before creating a Glass Processing Job.")
+		if self.status not in ("Cut Stock Posted", "Processing Started", "Completed"):
+			frappe.throw("Submit the cutting stock movement before creating a Glass Processing Job.")
+		existing = self.get("linked_processing_job") or frappe.db.get_value(
+			"Glass Processing Job",
+			{"cutting_job": self.name, "docstatus": ["!=", 2]},
+			"name",
+		)
+		if existing:
+			return {"message": "Glass Processing Job opened.", "processing_job": existing}
 		job = frappe.new_doc("Glass Processing Job")
 		job.cutting_job = self.name
 		job.company = job.company or self.company
@@ -142,12 +151,31 @@ class CuttingJob(Document):
 				if flag:
 					job.append("operations", {"operation": flag, "sales_order": piece.sales_order, "sales_order_item": piece.sales_order_item, "qty": qty, "status": "Pending"})
 		job.insert(ignore_permissions=True)
+		self.linked_processing_job = job.name
+		self.save(ignore_permissions=True)
 		return {"message": "Glass Processing Job created.", "processing_job": job.name}
 
 	@frappe.whitelist()
+	def start_processing(self):
+		if self.docstatus != 1:
+			frappe.throw("Submit the Cutting Job before starting processing.")
+		if not self.linked_stock_entry:
+			frappe.throw("Submit the cutting stock movement before starting processing.")
+		if frappe.db.get_value("Stock Entry", self.linked_stock_entry, "docstatus") != 1:
+			frappe.throw("Submit the cutting stock movement before starting processing.")
+		result = self.make_processing_job()
+		processing_job = result.get("processing_job")
+		self.status = "Processing Started"
+		self.linked_processing_job = processing_job
+		self.save(ignore_permissions=True)
+		if self.linked_stock_entry and frappe.db.exists("Stock Entry", self.linked_stock_entry):
+			frappe.db.set_value("Stock Entry", self.linked_stock_entry, "gf_processing_job", processing_job, update_modified=False)
+		return {"message": "Processing started.", "processing_job": processing_job}
+
+	@frappe.whitelist()
 	def complete_job(self):
-		if self.status != "Cut Stock Posted":
-			frappe.throw("Submit Repack #1 before completing the Cutting Job.")
+		if self.status not in ("Cut Stock Posted", "Processing Started"):
+			frappe.throw("Submit the cutting stock movement before completing the Cutting Job.")
 		self.status = "Completed"
 		self.save(ignore_permissions=True)
 		return {"message": "Cutting Job completed."}

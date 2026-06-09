@@ -101,7 +101,7 @@ def validate_delivery_note(doc, method=None):
 		processed_qty = flt(so_values.gf_processed_qty)
 		if processed_qty <= 0:
 			frappe.throw(
-				f"Delivery Note row {row.idx}: glass must be processed (Repack #2 posted) before delivery."
+				f"Delivery Note row {row.idx}: glass must be processed before delivery."
 			)
 
 		total_dn_qty = sum(
@@ -150,7 +150,7 @@ def on_delivery_note_submit(doc, method=None):
 
 
 def validate_stock_entry(doc, method=None):
-	"""Constrain Phase 0 glass stock entries to the two approved Repack flows."""
+	"""Constrain Phase 0 glass stock entries to the approved glass movement flows."""
 	if doc.doctype != "Stock Entry":
 		return
 	if not cint(doc.get("gf_created_by_glass_factory")) and not (
@@ -158,12 +158,12 @@ def validate_stock_entry(doc, method=None):
 	):
 		return
 
-	if doc.get("gf_cutting_job") and doc.get("gf_processing_job"):
-		frappe.throw("Stock Entry cannot link both Cutting Job and Glass Processing Job.")
 	if doc.stock_entry_type != "Repack" or doc.purpose != "Repack":
-		frappe.throw("Simple glass production must use Stock Entry type Repack.")
+		frappe.throw("Simple glass production must use the standard Repack Stock Entry type.")
 
 	flow = doc.get("gf_glass_stock_flow")
+	if doc.get("gf_cutting_job") and doc.get("gf_processing_job") and flow not in ("Raw to Cut WIP", "Cut WIP to Final"):
+		frappe.throw("Stock Entry cannot link both Cutting Job and Glass Processing Job for this stock flow.")
 	if flow not in ("Raw to Cut WIP", "Cut WIP to Final", "Remnant/Scrap"):
 		frappe.throw("Glass Stock Flow must be Raw to Cut WIP, Cut WIP to Final, or Remnant/Scrap.")
 

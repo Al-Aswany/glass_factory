@@ -1,4 +1,4 @@
-"""Quotation glass child-table sync into standard Quotation Item rows."""
+"""Glass child-table sync into standard selling document Item rows."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ PIECE_FLAG_FIELDS = (
 
 
 def sync_glass_pieces_to_items(doc, method=None):
-	"""Build/update Quotation Item rows from the glass child table."""
-	if doc.doctype != "Quotation":
+	"""Build/update standard Item rows from the glass child table."""
+	if doc.doctype not in ("Quotation", "Sales Order"):
 		return
 
 	glass_pieces = doc.get("glass_pieces") or []
@@ -34,6 +34,7 @@ def sync_glass_pieces_to_items(doc, method=None):
 		for row in doc.get("items") or []
 		if not cint(row.get("gf_is_glass_item"))
 	]
+	existing_rates = _existing_glass_rates(doc.get("items") or [])
 	synced_rows = []
 
 	price_list, company = _quotation_pricing_context(doc)
@@ -43,7 +44,7 @@ def sync_glass_pieces_to_items(doc, method=None):
 		source_id = piece.name or f"new-{piece.idx}"
 		_apply_rates_to_piece(piece, price_list=price_list, company=company)
 
-		row_data = _build_item_row(doc, piece, source_id)
+		row_data = _build_item_row(doc, piece, source_id, existing_rate=existing_rates.get(source_id))
 		piece.area_m2 = row_data["gf_area_m2"]
 		piece.final_item = row_data["gf_final_item"]
 		piece.description = row_data.get("description") or row_data["item_name"]
@@ -71,7 +72,7 @@ def _validate_piece(piece) -> None:
 		frappe.throw(f"Glass row {piece.idx}: Quantity must be greater than zero.")
 
 
-def _build_item_row(doc, piece, source_id: str) -> dict:
+def _build_item_row(doc, piece, source_id: str, existing_rate=None) -> dict:
 	thickness = flt(piece.thickness_mm)
 	if thickness <= 0:
 		thickness = flt(get_item_glass_meta(piece.raw_sheet_item).get("gf_thickness_mm"))
@@ -89,7 +90,7 @@ def _build_item_row(doc, piece, source_id: str) -> dict:
 	resolve_row_items(resolved)
 
 	item = frappe.get_doc("Item", resolved.item_code)
-	rate = flt(piece.rate)
+	rate = flt(existing_rate) if existing_rate not in (None, "") else flt(piece.rate)
 
 	return {
 		"gf_is_glass_item": 1,
@@ -118,11 +119,25 @@ def quotation_has_glass_pieces(doc) -> bool:
 	return bool(doc.get("glass_pieces"))
 
 
+def item_table_editable_fields() -> tuple[str, ...]:
+	"""Fields normal users may edit on generated glass Item rows."""
+	return ("rate",)
+
+
+def _existing_glass_rates(rows) -> dict[str, float]:
+	rates = {}
+	for row in rows or []:
+		if cint(row.get("gf_is_glass_item")) and row.get("gf_source_row_id"):
+			rates[row.get("gf_source_row_id")] = row.get("rate")
+	return rates
+
+
 @frappe.whitelist()
-def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None):
-	"""Build Quotation Item rows from glass pieces for client-side pre-save sync."""
+def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None, existing_glass_rates=None):
+	"""Build Item rows from glass pieces for client-side pre-save sync."""
 	glass_pieces = frappe.parse_json(glass_pieces)
 	manual_items = frappe.parse_json(manual_items) if manual_items else []
+	existing_glass_rates = frappe.parse_json(existing_glass_rates) if existing_glass_rates else {}
 
 	synced_rows = []
 	updated_pieces = []
@@ -132,7 +147,7 @@ def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list
 		_validate_piece(piece)
 		source_id = piece.name or f"new-{piece.idx}"
 		_apply_rates_to_piece(piece, price_list=price_list, company=company)
-		row_data = _build_item_row(None, piece, source_id)
+		row_data = _build_item_row(None, piece, source_id, existing_rate=existing_glass_rates.get(source_id))
 		synced_rows.append(row_data)
 		updated_pieces.append({
 			**piece,

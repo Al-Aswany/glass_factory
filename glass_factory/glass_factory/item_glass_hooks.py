@@ -8,6 +8,8 @@ from frappe.utils import flt
 from glass_factory.glass_factory.item_resolver import (
 	_parse_raw_item_code,
 	infer_glass_role_from_item_code,
+	get_allowed_glass_types,
+	validate_glass_type,
 )
 
 GLASS_ROLES_REQUIRING_CODE = ("Raw Sheet", "Cut WIP", "Final", "Remnant")
@@ -54,5 +56,9 @@ def validate_glass_item(doc, method=None):
 	item_code = doc.item_code or doc.name
 	if role in GLASS_ROLES_REQUIRING_CODE and not _parse_raw_item_code(item_code):
 		frappe.throw(
-			f"{GLASS_ITEM_CODE_HELP} Item <b>{frappe.utils.escape_html(item_code)}</b> cannot be used as {role}."
+			f"{GLASS_ITEM_CODE_HELP} Allowed glass types: {', '.join(get_allowed_glass_types())}. "
+			f"Item <b>{frappe.utils.escape_html(item_code)}</b> cannot be used as {role}."
 		)
+
+	if role in GLASS_ROLES_REQUIRING_CODE:
+		validate_glass_type(doc.gf_base_glass_type, context=f"Item {item_code}")

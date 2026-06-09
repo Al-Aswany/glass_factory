@@ -21,6 +21,14 @@ class TestManualMVPContract(unittest.TestCase):
 			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
 			hooks.doc_events["Quotation"]["before_validate"],
 		)
+		self.assertIn(
+			"glass_factory.glass_factory.quotation_glass.sync_glass_pieces_to_items",
+			hooks.doc_events["Sales Order"]["before_validate"],
+		)
+		self.assertIn(
+			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
+			hooks.doc_events["Sales Order"]["before_validate"],
+		)
 		self.assertEqual(
 			hooks.doc_events["Sales Order"]["before_submit"],
 			"glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
@@ -86,6 +94,14 @@ class TestManualMVPContract(unittest.TestCase):
 				"gf_width_mm",
 			],
 		)
+
+	def test_sales_order_and_stock_entry_trace_custom_fields(self):
+		self.assertTrue(frappe.db.exists("Custom Field", {"dt": "Sales Order", "fieldname": "glass_pieces"}))
+		self.assertTrue(frappe.db.exists("Custom Field", {"dt": "Stock Entry Detail", "fieldname": "gf_cutting_job"}))
+
+	def test_glass_factory_settings_has_allowed_types(self):
+		meta = frappe.get_meta("Glass Factory Settings")
+		self.assertIsNotNone(meta.get_field("allowed_glass_types"))
 
 	def test_legacy_doctypes_are_removed(self):
 		for doctype in (

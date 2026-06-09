@@ -106,3 +106,19 @@ def _repack1_incoming_rate(stock_entry_name: str, item_code: str) -> float:
 		if rate > 0:
 			return rate
 	return 0
+
+
+@frappe.whitelist()
+def start_processing_from_stock_entry(stock_entry_name: str):
+	"""Create or open the Processing Job related to a submitted cutting movement."""
+	se = frappe.get_doc("Stock Entry", stock_entry_name)
+	if se.docstatus != 1:
+		frappe.throw("Submit the cutting stock movement before starting processing.")
+	if se.get("gf_glass_stock_flow") != "Raw to Cut WIP" or not se.get("gf_cutting_job"):
+		frappe.throw("Start Processing is only available from a submitted cutting stock movement.")
+	job = frappe.get_doc("Cutting Job", se.gf_cutting_job)
+	result = job.start_processing()
+	processing_job = result.get("processing_job")
+	if processing_job and se.get("gf_processing_job") != processing_job:
+		frappe.db.set_value("Stock Entry", se.name, "gf_processing_job", processing_job, update_modified=False)
+	return {"processing_job": processing_job}

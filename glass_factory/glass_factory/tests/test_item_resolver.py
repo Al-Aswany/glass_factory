@@ -1,4 +1,7 @@
 import unittest
+from unittest.mock import patch
+
+import frappe
 
 from glass_factory.glass_factory.item_resolver import (
 	GlassSpec,
@@ -9,6 +12,7 @@ from glass_factory.glass_factory.item_resolver import (
 	parse_processing_flags,
 	processing_flags_from_item_code,
 	spec_from_item_code,
+	validate_glass_type,
 )
 
 
@@ -41,3 +45,9 @@ class TestGlassItemResolver(unittest.TestCase):
 		self.assertEqual(spec.length_mm, 1200)
 		self.assertEqual(spec.width_mm, 800)
 		self.assertEqual(processing_flags_from_item_code("GLS-CLEAR-8MM-1200X800-POL-HOL-TMP"), ("POL", "HOL", "TMP"))
+
+	def test_validate_glass_type_uses_predefined_setup(self):
+		with patch("glass_factory.glass_factory.item_resolver._settings_value", return_value="CLEAR\nBRONZE"):
+			validate_glass_type("clear")
+			with self.assertRaises(frappe.ValidationError):
+				validate_glass_type("BLUE")
