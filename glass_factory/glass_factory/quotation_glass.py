@@ -30,9 +30,9 @@ def sync_glass_pieces_to_items(doc, method=None):
 		return
 
 	manual_rows = [
-		row.as_dict(convert_dates=True)
+		row.as_dict(convert_dates_to_str=True)
 		for row in doc.get("items") or []
-		if not cint(row.get("gf_is_glass_item"))
+		if not cint(row.get("gf_is_glass_item")) and row.get("item_code")
 	]
 	existing_rates = _existing_glass_rates(doc.get("items") or [])
 	synced_rows = []
@@ -91,6 +91,8 @@ def _build_item_row(doc, piece, source_id: str, existing_rate=None) -> dict:
 
 	item = frappe.get_doc("Item", resolved.item_code)
 	rate = flt(existing_rate) if existing_rate not in (None, "") else flt(piece.rate)
+	qty = flt(piece.qty)
+	amount = flt(qty * rate, 2)
 
 	return {
 		"gf_is_glass_item": 1,
@@ -107,8 +109,13 @@ def _build_item_row(doc, piece, source_id: str, existing_rate=None) -> dict:
 		"item_code": resolved.item_code,
 		"item_name": item.item_name or item.name,
 		"description": item.item_name or item.name,
-		"qty": flt(piece.qty),
+		"qty": qty,
 		"rate": rate,
+		"amount": amount,
+		"net_rate": rate,
+		"base_rate": rate,
+		"base_amount": amount,
+		"net_amount": amount,
 		"uom": item.stock_uom or "Nos",
 		"stock_uom": item.stock_uom or "Nos",
 		"conversion_factor": 1,
@@ -135,6 +142,22 @@ def _existing_glass_rates(rows) -> dict[str, float]:
 @frappe.whitelist()
 def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None, existing_glass_rates=None):
 	"""Build Item rows from glass pieces for client-side pre-save sync."""
+	for attempt in range(2):
+		try:
+			return _build_quotation_items_from_glass(
+				glass_pieces,
+				manual_items=manual_items,
+				price_list=price_list,
+				company=company,
+				existing_glass_rates=existing_glass_rates,
+			)
+		except frappe.QueryDeadlockError:
+			if attempt:
+				raise
+			frappe.db.rollback()
+
+
+def _build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None, existing_glass_rates=None):
 	glass_pieces = frappe.parse_json(glass_pieces)
 	manual_items = frappe.parse_json(manual_items) if manual_items else []
 	existing_glass_rates = frappe.parse_json(existing_glass_rates) if existing_glass_rates else {}

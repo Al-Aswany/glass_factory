@@ -254,7 +254,11 @@ def _ensure_item(item_code: str, role: str, spec: GlassSpec, item_group: str, st
 	item.is_sales_item = 1 if role == "Final" else 0
 	item.is_purchase_item = 1 if role in ("Raw Sheet", "Remnant") else 0
 	_update_glass_item_fields(item, role, spec)
-	item.insert(ignore_permissions=True)
+	try:
+		item.insert(ignore_permissions=True)
+	except frappe.DuplicateEntryError:
+		if not frappe.db.exists("Item", item_code):
+			raise
 	return item.name
 
 

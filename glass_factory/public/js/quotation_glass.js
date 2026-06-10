@@ -35,8 +35,6 @@ const GF_ITEM_LOCKED_FIELDS = [
 	"stock_uom",
 	"conversion_factor",
 	"warehouse",
-	"s_warehouse",
-	"t_warehouse",
 	"gf_is_glass_item",
 	"gf_glass_specification",
 	"gf_raw_sheet_item",
@@ -57,11 +55,17 @@ function gf_register_glass_piece_handlers(doctype) {
 				filters: { gf_glass_item_role: ["in", ["Raw Sheet", "Remnant"]], disabled: 0 },
 			}));
 			gf_toggle_items_grid(frm);
+			// Re-sync only while editing; avoid marking a clean saved draft dirty on reload.
+			if (frm.is_new() || frm.is_dirty()) {
+				gf_maybe_sync_glass_items(frm);
+			}
 		},
 
-		async validate(frm) {
+		async before_save(frm) {
+			glass_factory.sync.cancel_scheduled_sync(frm);
 			if (!(frm.doc.glass_pieces || []).length) return;
-			await gf_sync_glass_items_to_form(frm);
+			await glass_factory.sync.sync_glass_items_to_form(frm, { silent: true });
+			frm.trigger("calculate_taxes_and_totals");
 		},
 
 		glass_pieces_add(frm) {
@@ -82,7 +86,7 @@ function gf_register_glass_piece_handlers(doctype) {
 		},
 
 		after_save(frm) {
-			gf_toggle_items_grid(frm);
+			gf_toggle_items_grid(frm, { mark_clean: true });
 		},
 	});
 }
@@ -138,7 +142,7 @@ async function gf_recalculate_glass_piece_rates(frm) {
 	});
 
 	frm.refresh_field("glass_pieces");
-	await gf_maybe_sync_glass_items(frm);
+	gf_maybe_sync_glass_items(frm);
 }
 
 function gf_is_piece_ready(piece) {
@@ -154,104 +158,27 @@ function gf_all_pieces_ready(glass_pieces) {
 	return (glass_pieces || []).every(gf_is_piece_ready);
 }
 
-async function gf_maybe_sync_glass_items(frm) {
+function gf_maybe_sync_glass_items(frm) {
 	const glass_pieces = frm.doc.glass_pieces || [];
 	if (!glass_pieces.length) return;
 	if (!gf_all_pieces_ready(glass_pieces)) return;
 	if (frm.is_new() || frm.doc.docstatus === 0) {
-		await gf_sync_glass_items_to_form(frm, { silent: true });
-	}
-}
-
-async function gf_sync_glass_items_to_form(frm, opts = {}) {
-	const glass_pieces = frm.doc.glass_pieces || [];
-	if (!glass_pieces.length) return;
-
-	gf_remove_empty_item_rows(frm);
-
-	const manual_items = (frm.doc.items || [])
-		.filter((row) => row.item_code && !row.gf_is_glass_item)
-		.map((row) => frappe.model.get_doc(row.doctype, row.name));
-	const existing_glass_rates = gf_existing_glass_rates(frm);
-
-	const { message } = await frappe.call({
-		method: "glass_factory.glass_factory.quotation_glass.build_quotation_items_from_glass",
-		args: {
-			glass_pieces: glass_pieces,
-			manual_items: manual_items,
-			existing_glass_rates: existing_glass_rates,
-			price_list: frm.doc.selling_price_list,
-			company: frm.doc.company,
-		},
-		freeze: !opts.silent,
-		freeze_message: opts.silent ? undefined : __("Resolving glass items..."),
-	});
-
-	frm.clear_table("items");
-	(message.items || []).forEach((row) => {
-		const child = frm.add_child("items");
-		Object.assign(child, row);
-	});
-
-	(message.glass_pieces || []).forEach((row, index) => {
-		if (!frm.doc.glass_pieces[index]) return;
-		Object.assign(frm.doc.glass_pieces[index], row);
-	});
-
-	frm.refresh_field("items");
-	frm.refresh_field("glass_pieces");
-	gf_toggle_items_grid(frm);
-
-	if (!opts.silent) {
-		frm.trigger("calculate_taxes_and_totals");
+		glass_factory.sync.schedule_sync(frm);
 	}
 }
 
 function gf_existing_glass_rates(frm) {
-	const rates = {};
-	(frm.doc.items || []).forEach((row) => {
-		if (row.gf_is_glass_item && row.gf_source_row_id) {
-			rates[row.gf_source_row_id] = row.rate;
-		}
-	});
-	return rates;
+	return glass_factory.sync.existing_glass_rates(frm);
 }
 
 function gf_remove_empty_item_rows(frm) {
-	const rows = frm.doc.items || [];
-	for (let i = rows.length - 1; i >= 0; i -= 1) {
-		const row = rows[i];
-		if (!row.item_code) {
-			frm.get_field("items").grid.grid_rows[i]?.remove();
-		}
-	}
+	glass_factory.sync.remove_empty_item_rows(frm);
 }
 
-function gf_toggle_items_grid(frm) {
-	const has_glass = (frm.doc.glass_pieces || []).length > 0;
-	const items_grid = frm.fields_dict.items?.grid;
-	if (!items_grid) return;
-
-	const hide_items = has_glass && frm.is_new();
-	items_grid.wrapper.toggle(!hide_items);
-	items_grid.cannot_add_rows = has_glass;
-	items_grid.cannot_delete_rows = has_glass;
-	items_grid.only_sortable = !has_glass;
-
-	GF_ITEM_LOCKED_FIELDS.forEach((fieldname) => {
-		if (items_grid.get_field(fieldname)) {
-			items_grid.update_docfield_property(fieldname, "read_only", has_glass ? 1 : 0);
-		}
-	});
-	GF_ITEM_RATE_FIELDS.forEach((fieldname) => {
-		if (items_grid.get_field(fieldname)) {
-			items_grid.update_docfield_property(fieldname, "read_only", 0);
-		}
-	});
-
-	frm.set_df_property("items", "reqd", has_glass ? 0 : 1);
-	frm.refresh_field("items");
+function gf_toggle_items_grid(frm, opts = {}) {
+	glass_factory.sync.toggle_items_grid(frm, opts);
 }
 
 
 gf_register_glass_piece_handlers("Quotation");
+

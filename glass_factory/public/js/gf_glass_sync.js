@@ -14,8 +14,6 @@ glass_factory.sync.item_locked_fields = [
 	"stock_uom",
 	"conversion_factor",
 	"warehouse",
-	"s_warehouse",
-	"t_warehouse",
 	"gf_is_glass_item",
 	"gf_glass_specification",
 	"gf_raw_sheet_item",
@@ -132,7 +130,16 @@ glass_factory.sync.remove_empty_item_rows = function (frm) {
 	}
 };
 
-glass_factory.sync.toggle_items_grid = function (frm) {
+glass_factory.sync.grid_has_field = function (items_grid, fieldname) {
+	return (items_grid.docfields || []).some((df) => df.fieldname === fieldname);
+};
+
+glass_factory.sync.set_grid_field_read_only = function (items_grid, fieldname, read_only) {
+	if (!glass_factory.sync.grid_has_field(items_grid, fieldname)) return;
+	items_grid.update_docfield_property(fieldname, "read_only", read_only ? 1 : 0);
+};
+
+glass_factory.sync.toggle_items_grid = function (frm, opts = {}) {
 	const has_glass = (frm.doc.glass_pieces || []).length > 0;
 	const items_grid = frm.fields_dict.items?.grid;
 	if (!items_grid) return;
@@ -143,18 +150,19 @@ glass_factory.sync.toggle_items_grid = function (frm) {
 	items_grid.only_sortable = !has_glass;
 
 	glass_factory.sync.item_locked_fields.forEach((fieldname) => {
-		if (items_grid.get_field(fieldname)) {
-			items_grid.update_docfield_property(fieldname, "read_only", has_glass ? 1 : 0);
-		}
+		glass_factory.sync.set_grid_field_read_only(items_grid, fieldname, has_glass);
 	});
 	glass_factory.sync.item_rate_fields.forEach((fieldname) => {
-		if (items_grid.get_field(fieldname)) {
-			items_grid.update_docfield_property(fieldname, "read_only", 0);
-		}
+		glass_factory.sync.set_grid_field_read_only(items_grid, fieldname, false);
 	});
 
 	frm.set_df_property("items", "reqd", has_glass ? 0 : 1);
-	frm.refresh_field("items");
+	if (opts.mark_clean) {
+		frm.doc.__unsaved = 0;
+		frm.toolbar?.refresh();
+	} else {
+		frm.refresh_field("items");
+	}
 };
 
 glass_factory.sync._call_build_items = function (

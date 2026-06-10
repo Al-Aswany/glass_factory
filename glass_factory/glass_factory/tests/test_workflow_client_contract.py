@@ -34,7 +34,22 @@ class TestWorkflowClientContract(unittest.TestCase):
 		self.assertIn('__("Cutting Job")', script)
 
 	def test_quotation_item_grid_locks_generated_rows(self):
-		script = (APP_ROOT / "public/js/quotation_glass.js").read_text()
-		self.assertIn("GF_ITEM_LOCKED_FIELDS", script)
-		self.assertIn('GF_ITEM_RATE_FIELDS.forEach', script)
-		self.assertIn('items_grid.cannot_add_rows = has_glass', script)
+		quotation_script = (APP_ROOT / "public/js/quotation_glass.js").read_text()
+		sync_script = (APP_ROOT / "public/js/gf_glass_sync.js").read_text()
+		self.assertIn("GF_ITEM_LOCKED_FIELDS", quotation_script)
+		self.assertIn("glass_factory.sync.sync_glass_items_to_form", quotation_script)
+		self.assertIn("glass_factory.sync.item_locked_fields", sync_script)
+		self.assertIn("items_grid.cannot_add_rows = has_glass", sync_script)
+		self.assertIn("glass_factory.sync.set_grid_field_read_only", sync_script)
+
+	def test_shared_glass_sync_does_not_depend_on_controller_globals(self):
+		script = (APP_ROOT / "public/js/gf_glass_sync.js").read_text()
+		self.assertIn("glass_factory.sync.remove_empty_item_rows(frm)", script)
+		self.assertIn("glass_factory.sync.existing_glass_rates(frm)", script)
+		self.assertIn("glass_factory.sync.toggle_items_grid(frm)", script)
+		self.assertIn("glass_factory.sync.grid_has_field", script)
+		self.assertNotIn("gf_remove_empty_item_rows(frm)", script)
+		self.assertNotIn("gf_existing_glass_rates(frm)", script)
+		self.assertNotIn("gf_toggle_items_grid(frm)", script)
+		self.assertNotIn('"s_warehouse"', script)
+		self.assertNotIn('"t_warehouse"', script)

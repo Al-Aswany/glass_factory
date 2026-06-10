@@ -27,7 +27,7 @@ add_to_apps_screen = [
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/glass_factory/css/glass_factory.css"
-# app_include_js = "/assets/glass_factory/js/glass_factory.js"
+app_include_js = "/assets/glass_factory/js/gf_glass_sync.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/glass_factory/css/glass_factory.css"

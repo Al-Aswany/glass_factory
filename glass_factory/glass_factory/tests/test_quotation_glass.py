@@ -2,12 +2,58 @@ import json
 import unittest
 
 import frappe
+from frappe.tests import IntegrationTestCase
 
 from glass_factory.glass_factory.quotation_glass import (
 	build_quotation_items_from_glass,
 	item_table_editable_fields,
 	processing_flags_from_piece,
 )
+
+
+class TestQuotationGlassSave(IntegrationTestCase):
+	def test_quotation_save_syncs_glass_pieces_to_items(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		customer = frappe.db.get_value("Customer", {}, "name")
+		company = frappe.db.get_value("Company", {"name": "Frappe"}, "name") or frappe.db.get_value(
+			"Company", {"is_group": 0}, "name"
+		)
+		company_currency = frappe.db.get_value("Company", company, "default_currency")
+		price_list = frappe.db.get_value(
+			"Price List",
+			{"selling": 1, "currency": company_currency},
+			"name",
+		)
+		if not price_list:
+			self.skipTest("No selling price list matches company currency on this site.")
+
+		doc = frappe.new_doc("Quotation")
+		doc.quotation_to = "Customer"
+		doc.party_name = customer
+		doc.customer = customer
+		doc.company = company
+		doc.transaction_date = "2026-06-09"
+		doc.selling_price_list = price_list
+		doc.append("glass_pieces", {
+			"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
+			"length_mm": 600,
+			"width_mm": 400,
+			"thickness_mm": 8,
+			"qty": 1,
+			"process_polish": 1,
+		})
+		doc.append("items", {"qty": 0})
+
+		doc.save()
+		self.assertEqual(len(doc.items), 1)
+		self.assertTrue(doc.items[0].gf_is_glass_item)
+		self.assertTrue(doc.items[0].item_code)
+		self.assertEqual(doc.items[0].qty, 1)
+
+		doc.delete()
+		frappe.db.commit()
 
 
 class TestQuotationGlass(unittest.TestCase):
