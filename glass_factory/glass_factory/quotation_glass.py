@@ -8,6 +8,7 @@ from frappe.utils import cint, flt
 
 from glass_factory.glass_factory.item_resolver import PROCESS_ORDER, get_item_glass_meta, resolve_row_items
 from glass_factory.glass_factory.piece_pricing import apply_piece_rates, calculate_piece_rates
+from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 
 PIECE_FLAG_FIELDS = (
 	("process_polish", "POL"),
@@ -35,6 +36,8 @@ def sync_glass_pieces_to_items(doc, method=None):
 		if not cint(row.get("gf_is_glass_item")) and row.get("item_code")
 	]
 	existing_rates = _existing_glass_rates(doc.get("items") or [])
+	existing_delivery_dates = _existing_glass_delivery_dates(doc.get("items") or [])
+	existing_warehouses = _existing_glass_warehouses(doc.get("items") or [])
 	synced_rows = []
 
 	price_list, company = _quotation_pricing_context(doc)
@@ -44,7 +47,14 @@ def sync_glass_pieces_to_items(doc, method=None):
 		source_id = piece.name or f"new-{piece.idx}"
 		_apply_rates_to_piece(piece, price_list=price_list, company=company)
 
-		row_data = _build_item_row(doc, piece, source_id, existing_rate=existing_rates.get(source_id))
+		row_data = _build_item_row(
+			doc,
+			piece,
+			source_id,
+			existing_rate=existing_rates.get(source_id),
+			existing_delivery_date=existing_delivery_dates.get(source_id),
+			existing_warehouse=existing_warehouses.get(source_id),
+		)
 		piece.area_m2 = row_data["gf_area_m2"]
 		piece.final_item = row_data["gf_final_item"]
 		piece.description = row_data.get("description") or row_data["item_name"]
@@ -72,7 +82,42 @@ def _validate_piece(piece) -> None:
 		frappe.throw(f"Glass row {piece.idx}: Quantity must be greater than zero.")
 
 
-def _build_item_row(doc, piece, source_id: str, existing_rate=None) -> dict:
+def _sales_order_item_delivery_date(doc, delivery_date=None):
+	if doc and doc.doctype == "Sales Order":
+		return doc.get("delivery_date")
+	return delivery_date
+
+
+def _sales_order_item_warehouse(doc):
+	if doc and doc.doctype == "Sales Order":
+		return doc.get("set_warehouse")
+	return None
+
+
+def _resolve_item_warehouse(doc, existing_warehouse=None, item_code=None):
+	warehouse = existing_warehouse or _sales_order_item_warehouse(doc)
+	if warehouse:
+		return warehouse
+	if doc and doc.doctype == "Sales Order":
+		if item_code:
+			company = doc.get("company") or frappe.defaults.get_defaults().company
+			if company:
+				from erpnext.stock.doctype.item.item import get_item_defaults
+
+				warehouse = get_item_defaults(item_code, company).get("default_warehouse")
+		if not warehouse:
+			return get_default_selling_warehouse()
+	return warehouse
+
+
+def _build_item_row(
+	doc,
+	piece,
+	source_id: str,
+	existing_rate=None,
+	existing_delivery_date=None,
+	existing_warehouse=None,
+) -> dict:
 	thickness = flt(piece.thickness_mm)
 	if thickness <= 0:
 		thickness = flt(get_item_glass_meta(piece.raw_sheet_item).get("gf_thickness_mm"))
@@ -94,7 +139,7 @@ def _build_item_row(doc, piece, source_id: str, existing_rate=None) -> dict:
 	qty = flt(piece.qty)
 	amount = flt(qty * rate, 2)
 
-	return {
+	row = {
 		"gf_is_glass_item": 1,
 		"gf_glass_specification": resolved.gf_glass_specification,
 		"gf_raw_sheet_item": resolved.gf_raw_sheet_item,
@@ -120,6 +165,13 @@ def _build_item_row(doc, piece, source_id: str, existing_rate=None) -> dict:
 		"stock_uom": item.stock_uom or "Nos",
 		"conversion_factor": 1,
 	}
+	delivery_date = existing_delivery_date or _sales_order_item_delivery_date(doc)
+	if delivery_date:
+		row["delivery_date"] = delivery_date
+	warehouse = _resolve_item_warehouse(doc, existing_warehouse, item_code=resolved.item_code)
+	if warehouse:
+		row["warehouse"] = warehouse
+	return row
 
 
 def quotation_has_glass_pieces(doc) -> bool:
@@ -139,8 +191,35 @@ def _existing_glass_rates(rows) -> dict[str, float]:
 	return rates
 
 
+def _existing_glass_delivery_dates(rows) -> dict[str, str]:
+	dates = {}
+	for row in rows or []:
+		if cint(row.get("gf_is_glass_item")) and row.get("gf_source_row_id") and row.get("delivery_date"):
+			dates[row.get("gf_source_row_id")] = row.get("delivery_date")
+	return dates
+
+
+def _existing_glass_warehouses(rows) -> dict[str, str]:
+	warehouses = {}
+	for row in rows or []:
+		if cint(row.get("gf_is_glass_item")) and row.get("gf_source_row_id") and row.get("warehouse"):
+			warehouses[row.get("gf_source_row_id")] = row.get("warehouse")
+	return warehouses
+
+
 @frappe.whitelist()
-def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None, existing_glass_rates=None):
+def build_quotation_items_from_glass(
+	glass_pieces,
+	manual_items=None,
+	price_list=None,
+	company=None,
+	existing_glass_rates=None,
+	existing_glass_delivery_dates=None,
+	existing_glass_warehouses=None,
+	delivery_date=None,
+	set_warehouse=None,
+	parent_doctype=None,
+):
 	"""Build Item rows from glass pieces for client-side pre-save sync."""
 	for attempt in range(2):
 		try:
@@ -150,6 +229,11 @@ def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list
 				price_list=price_list,
 				company=company,
 				existing_glass_rates=existing_glass_rates,
+				existing_glass_delivery_dates=existing_glass_delivery_dates,
+				existing_glass_warehouses=existing_glass_warehouses,
+				delivery_date=delivery_date,
+				set_warehouse=set_warehouse,
+				parent_doctype=parent_doctype,
 			)
 		except frappe.QueryDeadlockError:
 			if attempt:
@@ -157,10 +241,34 @@ def build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list
 			frappe.db.rollback()
 
 
-def _build_quotation_items_from_glass(glass_pieces, manual_items=None, price_list=None, company=None, existing_glass_rates=None):
+def _build_quotation_items_from_glass(
+	glass_pieces,
+	manual_items=None,
+	price_list=None,
+	company=None,
+	existing_glass_rates=None,
+	existing_glass_delivery_dates=None,
+	existing_glass_warehouses=None,
+	delivery_date=None,
+	set_warehouse=None,
+	parent_doctype=None,
+):
 	glass_pieces = frappe.parse_json(glass_pieces)
 	manual_items = frappe.parse_json(manual_items) if manual_items else []
 	existing_glass_rates = frappe.parse_json(existing_glass_rates) if existing_glass_rates else {}
+	existing_glass_delivery_dates = (
+		frappe.parse_json(existing_glass_delivery_dates) if existing_glass_delivery_dates else {}
+	)
+	existing_glass_warehouses = (
+		frappe.parse_json(existing_glass_warehouses) if existing_glass_warehouses else {}
+	)
+	doc = None
+	if parent_doctype == "Sales Order":
+		doc = frappe._dict(
+			doctype="Sales Order",
+			delivery_date=delivery_date,
+			set_warehouse=set_warehouse,
+		)
 
 	synced_rows = []
 	updated_pieces = []
@@ -170,7 +278,14 @@ def _build_quotation_items_from_glass(glass_pieces, manual_items=None, price_lis
 		_validate_piece(piece)
 		source_id = piece.name or f"new-{piece.idx}"
 		_apply_rates_to_piece(piece, price_list=price_list, company=company)
-		row_data = _build_item_row(None, piece, source_id, existing_rate=existing_glass_rates.get(source_id))
+		row_data = _build_item_row(
+			doc,
+			piece,
+			source_id,
+			existing_rate=existing_glass_rates.get(source_id),
+			existing_delivery_date=existing_glass_delivery_dates.get(source_id),
+			existing_warehouse=existing_glass_warehouses.get(source_id),
+		)
 		synced_rows.append(row_data)
 		updated_pieces.append({
 			**piece,

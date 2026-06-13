@@ -5,7 +5,10 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint, flt
 
+from erpnext.stock.doctype.item.item import get_item_defaults
+
 from glass_factory.glass_factory.item_resolver import item_role, resolve_row_items, validate_final_item_matches_row
+from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 
 NON_COMMERCIAL_ROLES = ("Raw Sheet", "Cut WIP", "Remnant", "Scrap")
 
@@ -39,6 +42,7 @@ def resolve_glass_items(doc, method=None):
 			_reject_non_commercial_item(row, doc.doctype)
 			validate_no_manufacturing_for_glass(row)
 			resolve_row_items(row)
+			_ensure_glass_row_warehouse(doc, row)
 		else:
 			_reject_non_commercial_item(row, doc.doctype)
 
@@ -214,6 +218,24 @@ def validate_no_manufacturing_for_glass(row) -> None:
 
 	if frappe.db.exists("BOM", {"item": item_code, "is_active": 1, "docstatus": 1}):
 		frappe.throw(f"Row {row.idx}: glass Item {item_code} must not have an active BOM.")
+
+
+def _ensure_glass_row_warehouse(doc, row) -> None:
+	"""Fill Sales Order delivery warehouse from header, item default, or settings."""
+	if row.get("warehouse") or doc.doctype != "Sales Order":
+		return
+
+	warehouse = doc.get("set_warehouse")
+	if not warehouse and row.get("item_code"):
+		company = doc.get("company") or frappe.defaults.get_defaults().company
+		if company:
+			warehouse = get_item_defaults(row.item_code, company).get("default_warehouse")
+
+	if not warehouse:
+		warehouse = get_default_selling_warehouse()
+
+	if warehouse:
+		row.warehouse = warehouse
 
 
 def _sync_glass_fields_from_quotation(doc) -> None:

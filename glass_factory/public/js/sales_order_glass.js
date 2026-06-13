@@ -84,6 +84,15 @@ function gf_register_glass_piece_handlers(doctype) {
 			gf_recalculate_glass_piece_rates(frm);
 		},
 
+		delivery_date(frm) {
+			gf_maybe_sync_glass_items(frm);
+		},
+
+		set_warehouse(frm) {
+			glass_factory.sync.apply_sales_order_warehouses(frm);
+			frm.refresh_field("items");
+		},
+
 		after_save(frm) {
 			gf_toggle_items_grid(frm, { mark_clean: true });
 		},

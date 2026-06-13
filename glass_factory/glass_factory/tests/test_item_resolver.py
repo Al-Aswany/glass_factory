@@ -8,12 +8,14 @@ from glass_factory.glass_factory.item_resolver import (
 	_cut_wip_item_code,
 	_final_item_code,
 	_raw_item_code,
+	ensure_final_item,
 	infer_glass_role_from_item_code,
 	parse_processing_flags,
 	processing_flags_from_item_code,
 	spec_from_item_code,
 	validate_glass_type,
 )
+from erpnext.stock.doctype.item.item import get_item_defaults
 
 
 class TestGlassItemResolver(unittest.TestCase):
@@ -52,3 +54,21 @@ class TestGlassItemResolver(unittest.TestCase):
 			with self.assertRaises(frappe.ValidationError) as ctx:
 				validate_glass_type("BLUE")
 			self.assertIn("Allowed glass types: CLEAR, BRONZE", str(ctx.exception))
+
+	def test_ensure_final_item_sets_default_warehouse(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		final_warehouse = frappe.db.get_single_value("Glass Factory Settings", "final_goods_warehouse")
+		if not final_warehouse:
+			self.skipTest("Final Goods Warehouse is not configured on this site.")
+
+		raw_doc = frappe.get_doc("Item", "GLS-CLEAR-8MM-3210X2250")
+		spec = GlassSpec("CLEAR", 8, 601, 401, ("POL",))
+		final_item = ensure_final_item(raw_doc, spec)
+		company = frappe.db.get_value("Warehouse", final_warehouse, "company")
+		if not company:
+			self.skipTest("Final Goods Warehouse company is not configured on this site.")
+
+		defaults = get_item_defaults(final_item, company)
+		self.assertEqual(defaults.get("default_warehouse"), final_warehouse)

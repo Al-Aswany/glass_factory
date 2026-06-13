@@ -64,6 +64,13 @@ def get_raw_warehouse() -> str:
 	return settings.raw_warehouse
 
 
+def get_default_selling_warehouse() -> str | None:
+	"""Default delivery warehouse for Sales Order glass item rows."""
+	if not frappe.db.exists("DocType", SETTINGS_DOCTYPE):
+		return None
+	return frappe.db.get_single_value(SETTINGS_DOCTYPE, "final_goods_warehouse") or None
+
+
 def _collect_setup_errors(settings, scope: str = "items") -> list[str]:
 	errors: list[str] = []
 

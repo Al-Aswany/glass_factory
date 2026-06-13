@@ -117,6 +117,87 @@ class TestQuotationGlass(unittest.TestCase):
 		self.assertEqual(row["qty"], 3)
 		self.assertEqual(row["uom"], frappe.db.get_value("Item", row["item_code"], "stock_uom") or "Nos")
 
+	def test_build_items_sets_sales_order_delivery_date(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		result = build_quotation_items_from_glass(
+			json.dumps([
+				{
+					"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
+					"length_mm": 600,
+					"width_mm": 400,
+					"thickness_mm": 8,
+					"qty": 1,
+				}
+			]),
+			delivery_date="2026-06-10",
+			parent_doctype="Sales Order",
+		)
+		self.assertEqual(result["items"][0]["delivery_date"], "2026-06-10")
+
+	def test_build_items_sets_sales_order_warehouse_from_set_warehouse(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		result = build_quotation_items_from_glass(
+			json.dumps([
+				{
+					"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
+					"length_mm": 600,
+					"width_mm": 400,
+					"thickness_mm": 8,
+					"qty": 1,
+				}
+			]),
+			set_warehouse="Stores - _TC",
+			parent_doctype="Sales Order",
+		)
+		self.assertEqual(result["items"][0]["warehouse"], "Stores - _TC")
+
+	def test_build_items_defaults_sales_order_warehouse_from_settings(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		default_warehouse = frappe.db.get_single_value(
+			"Glass Factory Settings", "final_goods_warehouse"
+		)
+		if not default_warehouse:
+			self.skipTest("Final Goods Warehouse is not configured on this site.")
+
+		result = build_quotation_items_from_glass(
+			json.dumps([
+				{
+					"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
+					"length_mm": 600,
+					"width_mm": 400,
+					"thickness_mm": 8,
+					"qty": 1,
+				}
+			]),
+			parent_doctype="Sales Order",
+		)
+		self.assertEqual(result["items"][0]["warehouse"], default_warehouse)
+
+	def test_build_items_preserves_existing_glass_delivery_dates(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		result = build_quotation_items_from_glass(
+			json.dumps([
+				{
+					"name": "piece-1",
+					"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
+					"length_mm": 600,
+					"width_mm": 400,
+					"thickness_mm": 8,
+					"qty": 1,
+				}
+			]),
+			existing_glass_delivery_dates=json.dumps({"piece-1": "2026-06-18"}),
+		)
+		self.assertEqual(result["items"][0]["delivery_date"], "2026-06-18")
+
 	def test_sales_order_direct_cycle_uses_same_builder(self):
 		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
 			self.skipTest("Sample raw sheet Item is not installed on this site.")

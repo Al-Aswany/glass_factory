@@ -1,6 +1,6 @@
 {
  "actions": [],
- "creation": "2026-06-07 00:00:00.000000",
+ "creation": "2026-06-07 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -8,12 +8,14 @@
   "raw_warehouse",
   "cut_wip_warehouse",
   "final_goods_warehouse",
+  "column_break_fkfg",
   "remnants_warehouse",
   "scrap_warehouse",
   "items_section",
   "default_uom",
   "default_item_group",
   "allowed_glass_types",
+  "column_break_inqm",
   "raw_item_group",
   "cut_wip_item_group",
   "final_item_group",
@@ -32,7 +34,8 @@
   "slots_rate_per_m2",
   "temper_rate_per_m2",
   "sandblast_rate_per_m2",
-  "laminate_rate_per_m2"
+  "laminate_rate_per_m2",
+  "column_break_ysny"
  ],
  "fields": [
   {
@@ -208,10 +211,23 @@
    "fieldname": "laminate_rate_per_m2",
    "fieldtype": "Currency",
    "label": "Laminated Rate (per m\u00b2)"
+  },
+  {
+   "fieldname": "column_break_fkfg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_inqm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_ysny",
+   "fieldtype": "Column Break"
   }
  ],
  "issingle": 1,
- "modified": "2026-06-07 00:00:00.000000",
+ "links": [],
+ "modified": "2026-06-13 16:41:11.126278",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Factory Settings",
@@ -240,6 +256,9 @@
    "write": 1
   }
  ],
- "sort_order": 50,
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": [],
  "track_changes": 1
 }

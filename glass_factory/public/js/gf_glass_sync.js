@@ -25,6 +25,7 @@ glass_factory.sync.item_locked_fields = [
 	"gf_processing_flags",
 	"gf_area_m2",
 	"gf_source_row_id",
+	"delivery_date",
 ];
 
 glass_factory.sync.cancel_scheduled_sync = function (frm) {
@@ -62,6 +63,9 @@ glass_factory.sync._sync_glass_items_impl = async function (frm, opts = {}) {
 		.filter((row) => row.item_code && !row.gf_is_glass_item)
 		.map((row) => frappe.model.get_doc(row.doctype, row.name));
 	const existing_glass_rates = glass_factory.sync.existing_glass_rates(frm);
+	const existing_glass_delivery_dates =
+		glass_factory.sync.existing_glass_delivery_dates(frm);
+	const existing_glass_warehouses = glass_factory.sync.existing_glass_warehouses(frm);
 
 	let message;
 	try {
@@ -70,6 +74,8 @@ glass_factory.sync._sync_glass_items_impl = async function (frm, opts = {}) {
 			glass_pieces,
 			manual_items,
 			existing_glass_rates,
+			existing_glass_delivery_dates,
+			existing_glass_warehouses,
 			opts
 		));
 	} catch (error) {
@@ -101,6 +107,9 @@ glass_factory.sync._sync_glass_items_impl = async function (frm, opts = {}) {
 		Object.assign(frm.doc.glass_pieces[index], row);
 	});
 
+	glass_factory.sync.apply_sales_order_delivery_dates(frm);
+	glass_factory.sync.apply_sales_order_warehouses(frm);
+
 	frm.refresh_field("items");
 	frm.refresh_field("glass_pieces");
 	glass_factory.sync.toggle_items_grid(frm);
@@ -118,6 +127,40 @@ glass_factory.sync.existing_glass_rates = function (frm) {
 		}
 	});
 	return rates;
+};
+
+glass_factory.sync.existing_glass_delivery_dates = function (frm) {
+	const dates = {};
+	(frm.doc.items || []).forEach((row) => {
+		if (row.gf_is_glass_item && row.gf_source_row_id && row.delivery_date) {
+			dates[row.gf_source_row_id] = row.delivery_date;
+		}
+	});
+	return dates;
+};
+
+glass_factory.sync.apply_sales_order_delivery_dates = function (frm) {
+	if (frm.doc.doctype !== "Sales Order" || !frm.doc.delivery_date) return;
+	(frm.doc.items || []).forEach((row) => {
+		row.delivery_date = frm.doc.delivery_date;
+	});
+};
+
+glass_factory.sync.existing_glass_warehouses = function (frm) {
+	const warehouses = {};
+	(frm.doc.items || []).forEach((row) => {
+		if (row.gf_is_glass_item && row.gf_source_row_id && row.warehouse) {
+			warehouses[row.gf_source_row_id] = row.warehouse;
+		}
+	});
+	return warehouses;
+};
+
+glass_factory.sync.apply_sales_order_warehouses = function (frm) {
+	if (frm.doc.doctype !== "Sales Order" || !frm.doc.set_warehouse) return;
+	(frm.doc.items || []).forEach((row) => {
+		row.warehouse = frm.doc.set_warehouse;
+	});
 };
 
 glass_factory.sync.remove_empty_item_rows = function (frm) {
@@ -170,16 +213,24 @@ glass_factory.sync._call_build_items = function (
 	glass_pieces,
 	manual_items,
 	existing_glass_rates,
+	existing_glass_delivery_dates,
+	existing_glass_warehouses,
 	opts
 ) {
+	const is_sales_order = frm.doc.doctype === "Sales Order";
 	return frappe.call({
 		method: GF_GLASS_SYNC_METHOD,
 		args: {
 			glass_pieces,
 			manual_items,
 			existing_glass_rates,
+			existing_glass_delivery_dates,
+			existing_glass_warehouses,
 			price_list: frm.doc.selling_price_list,
 			company: frm.doc.company,
+			parent_doctype: frm.doc.doctype,
+			delivery_date: is_sales_order ? frm.doc.delivery_date : undefined,
+			set_warehouse: is_sales_order ? frm.doc.set_warehouse : undefined,
 		},
 		freeze: !opts.silent,
 		freeze_message: opts.silent ? undefined : __("Resolving glass items..."),

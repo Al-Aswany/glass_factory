@@ -12,6 +12,13 @@ from frappe.utils import cint, flt
 PROCESS_ORDER = ("POL", "BEV", "HOL", "SLT", "TMP", "SBL", "LAM")
 VALID_ROLES = ("Raw Sheet", "Cut WIP", "Final", "Remnant", "Scrap")
 DEFAULT_GLASS_TYPES = ("CLEAR",)
+ROLE_WAREHOUSE_FIELDS = {
+	"Raw Sheet": "raw_warehouse",
+	"Cut WIP": "cut_wip_warehouse",
+	"Final": "final_goods_warehouse",
+	"Remnant": "remnants_warehouse",
+	"Scrap": "scrap_warehouse",
+}
 
 
 @dataclass(frozen=True)
@@ -197,6 +204,7 @@ def get_scrap_item() -> str:
 	item.stock_uom = "Sq m"
 	item.is_stock_item = 1
 	item.gf_glass_item_role = "Scrap"
+	_ensure_item_default_warehouse(item, "Scrap")
 	item.insert(ignore_permissions=True)
 	return item.name
 
@@ -254,6 +262,7 @@ def _ensure_item(item_code: str, role: str, spec: GlassSpec, item_group: str, st
 	item.is_sales_item = 1 if role == "Final" else 0
 	item.is_purchase_item = 1 if role in ("Raw Sheet", "Remnant") else 0
 	_update_glass_item_fields(item, role, spec)
+	_ensure_item_default_warehouse(item, role)
 	try:
 		item.insert(ignore_permissions=True)
 	except frappe.DuplicateEntryError:
@@ -267,8 +276,57 @@ def _update_glass_item_fields(item, role: str, spec: GlassSpec) -> None:
 	if item.get("gf_glass_item_role") != role:
 		item.gf_glass_item_role = role
 		changed = True
+	if _ensure_item_default_warehouse(item, role):
+		changed = True
 	if changed and not item.is_new():
 		item.save(ignore_permissions=True)
+
+
+def _default_warehouse_for_role(role: str) -> str | None:
+	fieldname = ROLE_WAREHOUSE_FIELDS.get(role)
+	if not fieldname:
+		return None
+	return _settings_value(fieldname)
+
+
+def _ensure_item_default_warehouse(item, role: str) -> bool:
+	"""Set Item Default.default_warehouse from Glass Factory Settings for the item role."""
+	warehouse = _default_warehouse_for_role(role)
+	if not warehouse:
+		return False
+
+	company = frappe.db.get_value("Warehouse", warehouse, "company")
+	if not company:
+		company = frappe.defaults.get_defaults().company
+	if not company:
+		return False
+
+	for row in item.get("item_defaults") or []:
+		if row.company == company:
+			if row.default_warehouse:
+				return False
+			row.default_warehouse = warehouse
+			return True
+
+	item.append("item_defaults", {"company": company, "default_warehouse": warehouse})
+	return True
+
+
+def backfill_glass_item_default_warehouse(item_code: str) -> bool:
+	"""Populate missing default warehouse on an existing glass Item."""
+	if not item_code or not frappe.db.exists("Item", item_code):
+		return False
+
+	item = frappe.get_doc("Item", item_code)
+	role = item.get("gf_glass_item_role") or infer_glass_role_from_item_code(item_code)
+	if not role:
+		return False
+
+	if not _ensure_item_default_warehouse(item, role):
+		return False
+
+	item.save(ignore_permissions=True)
+	return True
 
 
 def _raw_item_code(spec: GlassSpec) -> str:
