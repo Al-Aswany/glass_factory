@@ -35,7 +35,14 @@
   "temper_rate_per_m2",
   "sandblast_rate_per_m2",
   "laminate_rate_per_m2",
-  "column_break_ysny"
+  "column_break_ysny",
+  "polish_cost_per_m2",
+  "bevel_cost_per_m2",
+  "holes_cost_per_m2",
+  "slots_cost_per_m2",
+  "temper_cost_per_m2",
+  "sandblast_cost_per_m2",
+  "laminate_cost_per_m2"
  ],
  "fields": [
   {
@@ -223,6 +230,48 @@
   {
    "fieldname": "column_break_ysny",
    "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "polish_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Polish Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "fieldname": "bevel_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Bevel Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "fieldname": "holes_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Holes / Drilling Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "fieldname": "slots_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Slots Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "fieldname": "temper_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Tempered Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "fieldname": "sandblast_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Sandblast Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "fieldname": "laminate_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Laminated Cost (per m\u00b2)"
   }
  ],
  "issingle": 1,
