@@ -105,11 +105,10 @@ def calculate_processing_quantities(spec) -> None:
 	length = flt(spec.length_mm)
 	width = flt(spec.width_mm)
 	area_m2 = flt(spec.area_m2)
-	qty = flt(spec.qty)
 
 	spec.edge_meter = flt((2 * (length + width)) / 1000, 6) if length > 0 and width > 0 else 0
 	spec.chargeable_area_m2 = chargeable_area_m2(length, width) if length > 0 and width > 0 else 0
-	spec.total_chargeable_area_m2 = flt(spec.chargeable_area_m2 * qty, 6) if qty > 0 else 0
+	spec.total_chargeable_area_m2 = spec.chargeable_area_m2
 
 	if area_m2 <= 0 and length > 0 and width > 0:
 		spec.chargeable_area_m2 = chargeable_area_m2(length, width)
@@ -172,7 +171,6 @@ def calculate_processing_amounts(spec) -> None:
 
 def calculate_final_pricing(spec) -> None:
 	area_m2 = flt(spec.get("area_m2"))
-	qty = flt(spec.get("qty"))
 
 	if area_m2 <= 0:
 		frappe.throw("Area (m²) must be greater than zero to calculate pricing.")
@@ -193,7 +191,7 @@ def calculate_final_pricing(spec) -> None:
 
 	spec.price_difference_per_m2 = flt(spec.selling_rate_per_m2 - spec.calculated_rate_per_m2, 6)
 	spec.rate_per_piece = flt(spec.selling_rate_per_m2 * area_m2, 2)
-	spec.amount = flt(spec.rate_per_piece * qty, 2)
+	spec.amount = spec.rate_per_piece
 
 
 def pricing_result(spec) -> dict:

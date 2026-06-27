@@ -70,9 +70,18 @@ def validate_delivery_note(doc, method=None):
 	for row in doc.get("items") or []:
 		is_glass = cint(row.get("gf_is_glass_item"))
 		if not is_glass and row.get("so_detail"):
-			is_glass = cint(frappe.db.get_value("Sales Order Item", row.so_detail, "gf_is_glass_item"))
+			so_flags = frappe.db.get_value(
+				"Sales Order Item",
+				row.so_detail,
+				["gf_is_glass_item", "gf_from_glass_specification"],
+				as_dict=True,
+			)
+			if so_flags:
+				is_glass = cint(so_flags.gf_is_glass_item) or cint(so_flags.gf_from_glass_specification)
 			if is_glass:
 				row.gf_is_glass_item = 1
+				if cint(so_flags.gf_from_glass_specification):
+					row.gf_from_glass_specification = 1
 
 		if not is_glass:
 			_reject_non_commercial_item(row, "Delivery Note")
@@ -90,7 +99,9 @@ def validate_delivery_note(doc, method=None):
 				"gf_cutting_job",
 				"gf_processing_job",
 				"gf_glass_specification",
+				"gf_from_glass_specification",
 				"gf_processed_qty",
+				"gf_technical_summary",
 				"delivered_qty",
 			],
 			as_dict=True,
@@ -130,6 +141,10 @@ def validate_delivery_note(doc, method=None):
 		row.gf_cutting_job = row.get("gf_cutting_job") or so_values.gf_cutting_job
 		row.gf_processing_job = row.get("gf_processing_job") or so_values.gf_processing_job
 		row.gf_glass_specification = row.get("gf_glass_specification") or so_values.gf_glass_specification
+		row.gf_from_glass_specification = cint(
+			row.get("gf_from_glass_specification") or so_values.gf_from_glass_specification
+		)
+		row.gf_technical_summary = row.get("gf_technical_summary") or so_values.gf_technical_summary
 
 
 def on_delivery_note_submit(doc, method=None):
@@ -142,8 +157,10 @@ def on_delivery_note_submit(doc, method=None):
 		if not row.get("so_detail"):
 			continue
 		is_glass = cint(row.get("gf_is_glass_item")) or cint(
-			frappe.db.get_value("Sales Order Item", row.so_detail, "gf_is_glass_item")
+			frappe.db.get_value("Sales Order Item", row.so_detail, "gf_from_glass_specification")
 		)
+		if not is_glass:
+			is_glass = cint(frappe.db.get_value("Sales Order Item", row.so_detail, "gf_is_glass_item"))
 		if not is_glass or row.so_detail in updated:
 			continue
 		delivered_qty = flt(frappe.db.get_value("Sales Order Item", row.so_detail, "delivered_qty"))

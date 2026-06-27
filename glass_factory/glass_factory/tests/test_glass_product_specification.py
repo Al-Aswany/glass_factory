@@ -13,7 +13,7 @@ def _base_spec_kwargs(**overrides):
 		"thickness_mm": 8,
 		"length_mm": 1200,
 		"width_mm": 800,
-		"qty": 1,
+		"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
 	}
 	values.update(overrides)
 	return values
@@ -80,11 +80,11 @@ class TestGlassProductSpecification(IntegrationTestCase):
 		frappe.db.commit()
 
 	def test_calculates_area_fields(self):
-		doc = _new_spec(qty=10)
+		doc = _new_spec()
 		doc.insert()
 		expected_area = flt((1200 * 800) / 1_000_000, 6)
 		self.assertEqual(doc.area_m2, expected_area)
-		self.assertEqual(doc.total_area_m2, flt(expected_area * 10, 6))
+		self.assertEqual(doc.total_area_m2, expected_area)
 		doc.delete()
 		frappe.db.commit()
 
@@ -92,8 +92,6 @@ class TestGlassProductSpecification(IntegrationTestCase):
 		for fieldname, value in (
 			("length_mm", 0),
 			("width_mm", -1),
-			("thickness_mm", 0),
-			("qty", 0),
 		):
 			with self.subTest(fieldname=fieldname):
 				doc = _new_spec(**{fieldname: value})
@@ -164,6 +162,24 @@ class TestGlassProductSpecification(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			doc.insert()
 
+	def test_rejects_missing_raw_sheet_item(self):
+		doc = _new_spec(raw_sheet_item=None)
+		with self.assertRaises(frappe.ValidationError):
+			doc.insert()
+
+	def test_pulls_glass_type_and_thickness_from_raw_sheet_item(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		doc = _new_spec(raw_sheet_item="GLS-CLEAR-8MM-3210X2250")
+		doc.glass_type = ""
+		doc.thickness_mm = 0
+		doc.insert()
+		self.assertEqual(doc.glass_type, "CLEAR")
+		self.assertEqual(doc.thickness_mm, 8)
+		doc.delete()
+		frappe.db.commit()
+
 	def test_pulls_raw_sheet_dimensions_from_item(self):
 		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
 			self.skipTest("Sample raw sheet Item is not installed on this site.")
@@ -176,8 +192,19 @@ class TestGlassProductSpecification(IntegrationTestCase):
 		doc.delete()
 		frappe.db.commit()
 
+	def test_refresh_preview_without_finished_dimensions(self):
+		if not frappe.db.exists("Item", "GLS-CLEAR-8MM-3210X2250"):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		doc = _new_spec(length_mm=0, width_mm=0)
+		result = doc.refresh_preview()
+		self.assertEqual(result["glass_type"], "CLEAR")
+		self.assertEqual(result["thickness_mm"], 8)
+		self.assertEqual(result["raw_sheet_length_mm"], 3210)
+		self.assertEqual(result["raw_sheet_width_mm"], 2250)
+
 	def test_refresh_preview_whitelisted_method(self):
-		doc = _new_spec(qty=2, polish=1)
+		doc = _new_spec(polish=1)
 		doc.insert()
 		result = doc.refresh_preview()
 		self.assertEqual(result["item_code_preview"], "GLS-CLEAR-8MM-1200X800-POL")

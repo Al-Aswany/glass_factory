@@ -12,7 +12,9 @@ OPERATION_LABELS = {
 	"POL": "Polishing",
 	"BEV": "Beveling",
 	"HOL": "Drilling",
+	"SHOL": "Special Hole",
 	"SLT": "Slotting",
+	"SSLT": "Special Slot",
 	"TMP": "Tempering",
 	"SBL": "Sandblasting",
 	"LAM": "Laminating",
@@ -92,7 +94,7 @@ class GlassProcessingJob(Document):
 			row.status = status
 			self.status = "Processing In Progress"
 			self.save(ignore_permissions=True)
-			return {"message": f"{_operation_label(row.operation)} marked {status}."}
+			return {"message": f"{_operation_label(row)} marked {status}."}
 		frappe.throw("Processing operation was not found.")
 
 	def _validate_inputs_outputs(self):
@@ -139,11 +141,11 @@ def get_valid_actions_for_doc(doc) -> list[dict[str, str]]:
 
 	for row in doc.get("operations") or []:
 		if row.status == "In Progress":
-			return [{"action": f"complete_operation::{row.name}", "label": f"Complete {_operation_label(row.operation)}"}]
+			return [{"action": f"complete_operation::{row.name}", "label": f"Complete {_operation_label(row)}"}]
 
 	for row in doc.get("operations") or []:
 		if row.status in ("", "Pending"):
-			return [{"action": f"start_operation::{row.name}", "label": f"Start {_operation_label(row.operation)}"}]
+			return [{"action": f"start_operation::{row.name}", "label": f"Start {_operation_label(row)}"}]
 
 	if not doc.get("linked_stock_entry"):
 		return [{"action": "create_final_stock_movement", "label": "Create Final Stock Movement"}]
@@ -152,5 +154,15 @@ def get_valid_actions_for_doc(doc) -> list[dict[str, str]]:
 	return [{"action": "complete_job", "label": "Complete Job"}]
 
 
-def _operation_label(operation: str) -> str:
+def _operation_label(operation_row) -> str:
+	if hasattr(operation_row, "get"):
+		label = operation_row.get("operation_label")
+		if label:
+			return label
+		operation = operation_row.get("operation")
+	else:
+		label = getattr(operation_row, "operation_label", None)
+		if label:
+			return label
+		operation = getattr(operation_row, "operation", None)
 	return OPERATION_LABELS.get(operation, operation or "Operation")

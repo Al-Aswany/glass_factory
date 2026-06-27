@@ -52,9 +52,9 @@ TECHNICAL_SPEC_FIELDS = (
 
 class GlassProductSpecification(Document):
 	def validate(self):
+		self.pull_from_raw_sheet_item()
 		self._validate_glass_dimensions()
 		self.calculate_area()
-		self.pull_raw_sheet_dimensions()
 		self.validate_counts()
 		self.validate_primary_design_attachment()
 		self.update_item_code_preview()
@@ -92,31 +92,43 @@ class GlassProductSpecification(Document):
 	def calculate_area(self):
 		length = flt(self.length_mm)
 		width = flt(self.width_mm)
-		qty = flt(self.qty)
 		self.area_m2 = flt((length * width) / 1_000_000, 6) if length > 0 and width > 0 else 0
-		self.total_area_m2 = flt(self.area_m2 * qty, 6) if qty > 0 else 0
+		self.total_area_m2 = self.area_m2
 
-	def pull_raw_sheet_dimensions(self):
+	def pull_from_raw_sheet_item(self):
 		if not self.raw_sheet_item:
+			self.glass_type = ""
+			self.thickness_mm = 0
 			self.raw_sheet_length_mm = 0
 			self.raw_sheet_width_mm = 0
 			self.raw_sheet_area_m2 = 0
 			return
 
 		meta = get_item_glass_meta(self.raw_sheet_item)
+		glass_type = meta.get("gf_base_glass_type") or ""
+		if glass_type:
+			self.glass_type = glass_type
+
+		thickness = flt(meta.get("gf_thickness_mm"))
+		if thickness > 0:
+			self.thickness_mm = thickness
+
 		length = flt(meta.get("gf_length_mm"))
 		width = flt(meta.get("gf_width_mm"))
-
 		if not length or not width:
 			item = frappe.get_doc("Item", self.raw_sheet_item)
-			length = flt(item.get("gf_length_mm"))
-			width = flt(item.get("gf_width_mm"))
+			length = flt(item.get("gf_length_mm")) or length
+			width = flt(item.get("gf_width_mm")) or width
 
 		self.raw_sheet_length_mm = length
 		self.raw_sheet_width_mm = width
 		self.raw_sheet_area_m2 = (
 			flt((length * width) / 1_000_000, 6) if length > 0 and width > 0 else 0
 		)
+
+		rate = fetch_raw_sheet_rate(self, fetch_from_item_price=True)
+		if rate > 0:
+			self.raw_sheet_rate_per_piece = rate
 
 	def validate_counts(self):
 		for fieldname in ("hole_count", "special_hole_count", "slot_count", "special_slot_count"):
@@ -155,9 +167,7 @@ class GlassProductSpecification(Document):
 		parts = [
 			f"{self.glass_type.upper()} {flt(self.thickness_mm):g}mm",
 			f"{flt(self.length_mm):g} x {flt(self.width_mm):g} mm",
-			f"Qty {flt(self.qty):g}",
-			f"Area {flt(self.area_m2):g} m² each",
-			f"Total {flt(self.total_area_m2):g} m²",
+			f"Area {flt(self.area_m2):g} m²",
 		]
 
 		operations = self._operation_summary_parts()
@@ -167,6 +177,8 @@ class GlassProductSpecification(Document):
 		self.technical_summary = ", ".join(parts)
 
 	def _validate_glass_dimensions(self):
+		if not self.raw_sheet_item:
+			frappe.throw("Raw Sheet Item is required.")
 		if self.glass_type:
 			validate_glass_type(self.glass_type, context="Glass type")
 		if flt(self.thickness_mm) <= 0:
@@ -175,8 +187,6 @@ class GlassProductSpecification(Document):
 			frappe.throw("Length must be greater than zero.")
 		if flt(self.width_mm) <= 0:
 			frappe.throw("Width must be greater than zero.")
-		if flt(self.qty) <= 0:
-			frappe.throw("Qty must be greater than zero.")
 
 	def _operation_summary_parts(self) -> list[str]:
 		parts: list[str] = []
@@ -213,12 +223,15 @@ class GlassProductSpecification(Document):
 
 	@frappe.whitelist()
 	def refresh_preview(self):
+		self.pull_from_raw_sheet_item()
 		self.calculate_area()
-		self.pull_raw_sheet_dimensions()
 		self.update_item_code_preview()
 		self.build_technical_summary()
-		self.calculate_pricing()
+		if flt(self.length_mm) > 0 and flt(self.width_mm) > 0:
+			self.calculate_pricing()
 		result = {
+			"glass_type": self.glass_type,
+			"thickness_mm": self.thickness_mm,
 			"area_m2": self.area_m2,
 			"total_area_m2": self.total_area_m2,
 			"raw_sheet_length_mm": self.raw_sheet_length_mm,
@@ -233,12 +246,11 @@ class GlassProductSpecification(Document):
 
 	@frappe.whitelist()
 	def refresh_pricing(self):
+		self.pull_from_raw_sheet_item()
 		self._validate_glass_dimensions()
 		self.calculate_area()
-		self.pull_raw_sheet_dimensions()
 
-		had_raw_rate = flt(self.raw_sheet_rate_per_piece) > 0
-		if not had_raw_rate:
+		if flt(self.raw_sheet_rate_per_piece) <= 0:
 			self.fetch_raw_sheet_rate(fetch_from_item_price=True)
 
 		self.calculate_pricing()

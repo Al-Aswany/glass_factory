@@ -8,6 +8,7 @@ from frappe.utils import flt, nowdate, nowtime
 from erpnext.stock.utils import get_incoming_rate
 
 from glass_factory.glass_factory.batch_utils import batch_row_fields, ensure_output_batch, ensure_remnant_batch
+from glass_factory.glass_factory.spec_production import stock_entry_trace_fields
 from glass_factory.glass_factory.item_resolver import (
 	_parse_raw_item_code,
 	ensure_remnant_item,
@@ -97,11 +98,9 @@ def build_cutting_repack(cutting_job):
 			"stock_uom": _stock_uom(piece.cut_wip_item),
 			"conversion_factor": 1,
 			"is_finished_item": 1,
-			"gf_sales_order": piece.sales_order,
-			"gf_sales_order_item": piece.sales_order_item,
-			"gf_glass_specification": piece.get("glass_specification"),
 			"gf_source_item_role": "Cut WIP",
 		}
+		row_data.update(stock_entry_trace_fields(piece))
 		row_data.update(batch_row_fields(piece.cut_wip_item, batch_no))
 		se.append("items", row_data)
 
@@ -288,11 +287,19 @@ def build_processing_repack(processing_job):
 			"uom": _stock_uom(row.cut_wip_item),
 			"stock_uom": _stock_uom(row.cut_wip_item),
 			"conversion_factor": 1,
-			"gf_sales_order": row.sales_order,
-			"gf_sales_order_item": row.sales_order_item,
-			"gf_glass_specification": row.get("glass_specification"),
 			"gf_source_item_role": "Cut WIP",
 		}
+		row_data.update(
+			stock_entry_trace_fields(
+				frappe._dict(
+					sales_order=row.sales_order,
+					sales_order_item=row.sales_order_item,
+					glass_specification=row.get("glass_specification"),
+					from_glass_specification=row.get("from_glass_specification"),
+					technical_summary=row.get("technical_summary"),
+				)
+			)
+		)
 		row_data.update(batch_row_fields(row.cut_wip_item, batch_no))
 		se.append("items", row_data)
 
@@ -324,11 +331,19 @@ def build_processing_repack(processing_job):
 			"stock_uom": _stock_uom(row.final_item),
 			"conversion_factor": 1,
 			"is_finished_item": 1,
-			"gf_sales_order": row.sales_order,
-			"gf_sales_order_item": row.sales_order_item,
-			"gf_glass_specification": row.get("glass_specification"),
 			"gf_source_item_role": "Final",
 		}
+		row_data.update(
+			stock_entry_trace_fields(
+				frappe._dict(
+					sales_order=row.sales_order,
+					sales_order_item=row.sales_order_item,
+					glass_specification=row.get("glass_specification"),
+					from_glass_specification=row.get("from_glass_specification"),
+					technical_summary=row.get("technical_summary"),
+				)
+			)
+		)
 		row_data.update(batch_row_fields(row.final_item, batch_no))
 		override_rate = flt(row.get("basic_rate"))
 		if override_rate > 0:

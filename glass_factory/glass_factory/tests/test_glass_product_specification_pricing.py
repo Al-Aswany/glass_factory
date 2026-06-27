@@ -25,7 +25,6 @@ def _pricing_spec(**overrides):
 		"thickness_mm": 8,
 		"length_mm": 1200,
 		"width_mm": 800,
-		"qty": 10,
 		"raw_sheet_item": RAW_SHEET_ITEM,
 		"raw_sheet_rate_per_piece": 100,
 		"currency": "USD",
@@ -33,7 +32,7 @@ def _pricing_spec(**overrides):
 	values.update(overrides)
 	doc = frappe._dict(values)
 	doc.area_m2 = flt((doc.length_mm * doc.width_mm) / 1_000_000, 6)
-	doc.total_area_m2 = flt(doc.area_m2 * doc.qty, 6)
+	doc.total_area_m2 = doc.area_m2
 
 	if any(
 		key in overrides
@@ -165,10 +164,10 @@ class TestGlassProductSpecificationPricingCalculations(unittest.TestCase):
 		calculate_spec_pricing(spec)
 		self.assertEqual(spec.rate_per_piece, 24.0)
 
-	def test_amount_equals_rate_per_piece_times_qty(self):
-		spec = _pricing_spec(manual_selling_rate_per_m2=25, qty=10)
+	def test_amount_equals_rate_per_piece(self):
+		spec = _pricing_spec(manual_selling_rate_per_m2=25)
 		calculate_spec_pricing(spec)
-		self.assertEqual(spec.amount, 240.0)
+		self.assertEqual(spec.amount, 24.0)
 
 	def test_operation_rates_are_selected_by_currency(self):
 		self.assertEqual(get_operation_rate("Polish", "USD", "Per Edge Meter"), 5)
@@ -215,7 +214,6 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 
 	def test_validate_calculates_pricing_on_save(self):
 		doc = _new_spec(
-			qty=10,
 			raw_sheet_item=RAW_SHEET_ITEM,
 			raw_sheet_rate_per_piece=100,
 			currency="USD",
@@ -230,7 +228,6 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 
 	def test_refresh_pricing_fetches_and_saves(self):
 		doc = _new_spec(
-			qty=10,
 			raw_sheet_item=RAW_SHEET_ITEM,
 			currency="USD",
 			polish=1,
@@ -257,7 +254,7 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 		doc.reload()
 		self.assertEqual(doc.generation_status, "Generated")
 		self.assertEqual(doc.rate_per_piece, 24.0)
-		self.assertEqual(doc.amount, 240.0)
+		self.assertEqual(doc.amount, 24.0)
 
 		doc.delete()
 		frappe.db.commit()

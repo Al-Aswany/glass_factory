@@ -1,9 +1,6 @@
 const GF_SPEC_PREVIEW_FIELDS = [
-	"glass_type",
-	"thickness_mm",
 	"length_mm",
 	"width_mm",
-	"qty",
 	"polish",
 	"bevel",
 	"temper",
@@ -16,7 +13,6 @@ const GF_SPEC_PREVIEW_FIELDS = [
 ];
 
 const GF_SPEC_PRICING_FIELDS = [
-	"raw_sheet_rate_per_piece",
 	"manual_selling_rate_per_m2",
 	"currency",
 	"price_list",
@@ -31,7 +27,6 @@ const GF_SPEC_PRICING_FIELDS = [
 	"special_slot_count",
 	"length_mm",
 	"width_mm",
-	"qty",
 ];
 
 const GF_SPEC_PRICING_RESULT_FIELDS = [
@@ -51,6 +46,15 @@ const GF_SPEC_PRICING_RESULT_FIELDS = [
 	"price_difference_per_m2",
 	"rate_per_piece",
 	"amount",
+];
+
+const GF_SPEC_RAW_SHEET_FIELDS = [
+	"glass_type",
+	"thickness_mm",
+	"raw_sheet_length_mm",
+	"raw_sheet_width_mm",
+	"raw_sheet_area_m2",
+	"raw_sheet_rate_per_piece",
 ];
 
 frappe.ui.form.on("Glass Product Specification", {
@@ -109,7 +113,7 @@ frappe.ui.form.on("Glass Product Specification", {
 	},
 
 	raw_sheet_item(frm) {
-		gf_refresh_spec_preview(frm);
+		gf_pull_from_raw_sheet_item(frm);
 	},
 });
 
@@ -135,8 +139,14 @@ GF_SPEC_PRICING_FIELDS.forEach((fieldname) => {
 	});
 });
 
-function gf_refresh_spec_preview(frm) {
-	if (!frm.doc.glass_type || !frm.doc.thickness_mm || !frm.doc.length_mm || !frm.doc.width_mm) {
+function gf_pull_from_raw_sheet_item(frm) {
+	if (!frm.doc.raw_sheet_item) {
+		frm.set_value("glass_type", "");
+		frm.set_value("thickness_mm", 0);
+		frm.set_value("raw_sheet_length_mm", 0);
+		frm.set_value("raw_sheet_width_mm", 0);
+		frm.set_value("raw_sheet_area_m2", 0);
+		frm.set_value("raw_sheet_rate_per_piece", 0);
 		return;
 	}
 
@@ -150,11 +160,35 @@ function gf_refresh_spec_preview(frm) {
 		}
 		Object.assign(frm.doc, message);
 		frm.refresh_fields([
+			...GF_SPEC_RAW_SHEET_FIELDS,
 			"area_m2",
 			"total_area_m2",
-			"raw_sheet_length_mm",
-			"raw_sheet_width_mm",
-			"raw_sheet_area_m2",
+			"item_code_preview",
+			"operation_code_preview",
+			"technical_summary",
+			...GF_SPEC_PRICING_RESULT_FIELDS,
+		]);
+	});
+}
+
+function gf_refresh_spec_preview(frm) {
+	if (!frm.doc.raw_sheet_item || !frm.doc.length_mm || !frm.doc.width_mm) {
+		return;
+	}
+
+	frm.call({
+		doc: frm.doc,
+		method: "refresh_preview",
+		freeze: false,
+	}).then(({ message }) => {
+		if (!message) {
+			return;
+		}
+		Object.assign(frm.doc, message);
+		frm.refresh_fields([
+			...GF_SPEC_RAW_SHEET_FIELDS,
+			"area_m2",
+			"total_area_m2",
 			"item_code_preview",
 			"operation_code_preview",
 			"technical_summary",

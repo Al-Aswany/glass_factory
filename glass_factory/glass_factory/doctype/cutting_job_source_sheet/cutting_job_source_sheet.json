@@ -21,7 +21,7 @@
   {"fieldname": "item_code", "fieldtype": "Link", "in_list_view": 1, "label": "Source Item", "options": "Item", "reqd": 1},
   {"fieldname": "source_role", "fieldtype": "Select", "in_list_view": 1, "label": "Source Role", "options": "Raw Sheet\nRemnant", "reqd": 1},
   {"fieldname": "warehouse", "fieldtype": "Link", "in_list_view": 1, "label": "Warehouse", "options": "Warehouse"},
-  {"fieldname": "batch_no", "fieldtype": "Link", "label": "Batch", "options": "Batch", "reqd": 1},
+  {"fieldname": "batch_no", "fieldtype": "Link", "in_list_view": 1, "label": "Batch", "options": "Batch"},
   {"fieldname": "length_mm", "fieldtype": "Float", "label": "Length (mm)"},
   {"fieldname": "width_mm", "fieldtype": "Float", "label": "Width (mm)"},
   {"default": "1", "fieldname": "qty_consumed", "fieldtype": "Float", "in_list_view": 1, "label": "Qty Consumed", "reqd": 1},

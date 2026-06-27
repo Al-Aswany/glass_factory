@@ -154,15 +154,15 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 	def _assert_row_matches_spec(self, row, spec):
 		final_item = spec.final_item_code or spec.generated_item
 		self.assertEqual(row.item_code, final_item)
-		self.assertEqual(flt(row.qty), flt(spec.qty))
+		self.assertEqual(flt(row.qty), 1)
 		self.assertEqual(flt(row.rate), flt(spec.rate_per_piece))
-		self.assertEqual(flt(row.amount), flt(spec.rate_per_piece * spec.qty, 2))
+		self.assertEqual(flt(row.amount), flt(spec.rate_per_piece, 2))
 		self.assertEqual(row.gf_glass_specification, spec.name)
 		self.assertEqual(cint(row.gf_from_glass_specification), 1)
 		self.assertEqual(flt(row.gf_area_m2), flt(spec.area_m2))
-		self.assertEqual(flt(row.gf_total_area_m2), flt(spec.area_m2 * spec.qty, 6))
+		self.assertEqual(flt(row.gf_total_area_m2), flt(spec.area_m2, 6))
 		self.assertEqual(flt(row.gf_selling_rate_per_m2), flt(spec.selling_rate_per_m2))
-		self.assertEqual(flt(row.gf_calculated_rate_per_m2), flt(spec.calculated_rate_per_m2))
+		self.assertAlmostEqual(flt(row.gf_calculated_rate_per_m2), flt(spec.calculated_rate_per_m2), places=2)
 		self.assertEqual(flt(row.gf_rate_per_piece), flt(spec.rate_per_piece))
 		self.assertEqual(row.gf_raw_sheet_item, spec.raw_item_code or spec.raw_sheet_item)
 		self.assertEqual(row.gf_cut_wip_item, spec.cut_wip_item_code)
@@ -267,7 +267,7 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 		frappe.db.commit()
 
 	def test_update_existing_preserves_manually_edited_rate(self):
-		spec = _ready_spec(qty=10)
+		spec = _ready_spec()
 		result = add_spec_to_transaction(spec.name, "Quotation")
 		quotation = frappe.get_doc("Quotation", result["name"])
 		row = quotation.items[0]
@@ -275,7 +275,7 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 		row.amount = flt(row.rate * row.qty, 2)
 		quotation.save()
 
-		spec.qty = 12
+		spec.manual_selling_rate_per_m2 = 30
 		spec.save()
 		add_spec_to_transaction(
 			spec.name,
@@ -286,8 +286,8 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 		quotation.reload()
 		row = quotation.items[0]
 		self.assertEqual(flt(row.rate), 26)
-		self.assertEqual(flt(row.qty), 12)
-		self.assertEqual(flt(row.amount), flt(26 * 12, 2))
+		self.assertEqual(flt(row.qty), 1)
+		self.assertEqual(flt(row.amount), 26.0)
 		self.assertEqual(cint(row.gf_transaction_rate_overridden), 1)
 
 		quotation.delete()

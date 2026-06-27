@@ -6,6 +6,7 @@ import frappe
 from frappe.utils import cint, flt, getdate, today
 
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
+from glass_factory.glass_factory.spec_production import enrich_spec_transaction_row
 
 SUPPORTED_TARGET_DOCTYPES = ("Quotation", "Sales Order")
 
@@ -51,9 +52,6 @@ def validate_spec_ready_for_transaction(spec, *, allow_zero_price: bool = False)
 	if status not in ("Ready", "Used"):
 		frappe.throw("This specification must be Ready before it can be used in a transaction.")
 
-	if flt(spec.get("qty")) <= 0:
-		frappe.throw("Qty must be greater than zero.")
-
 	if flt(spec.get("area_m2")) <= 0:
 		frappe.throw("Area must be greater than zero.")
 
@@ -89,10 +87,10 @@ def build_design_attachment_summary(spec) -> str:
 def map_spec_to_transaction_row(spec) -> dict:
 	final_item = spec.get("final_item_code") or spec.get("generated_item")
 	item = frappe.get_doc("Item", final_item)
-	qty = flt(spec.qty)
+	qty = 1
 	rate = flt(spec.rate_per_piece)
 	amount = flt(qty * rate, 2)
-	total_area_m2 = flt(flt(spec.area_m2) * qty, 6)
+	total_area_m2 = flt(spec.area_m2)
 
 	return {
 		"item_code": final_item,
@@ -124,6 +122,7 @@ def map_spec_to_transaction_row(spec) -> dict:
 		"gf_technical_summary": spec.get("technical_summary") or "",
 		"gf_design_attachment_summary": build_design_attachment_summary(spec),
 		"gf_transaction_rate_overridden": 0,
+		**enrich_spec_transaction_row(spec),
 	}
 
 

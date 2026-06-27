@@ -224,5 +224,7 @@ frappe.ui.form.on("Sales Order", {
 });
 
 function gf_sales_order_has_glass_items(frm) {
-	return (frm.doc.items || []).some((row) => row.gf_is_glass_item);
+	return (frm.doc.items || []).some(
+		(row) => row.gf_is_glass_item || row.gf_from_glass_specification
+	);
 }

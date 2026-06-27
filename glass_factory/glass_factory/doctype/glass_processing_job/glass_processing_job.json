@@ -11,6 +11,10 @@
   "status",
   "company",
   "cutting_job",
+  "section_customer",
+  "customer",
+  "customer_name",
+  "customer_display",
   "section_inputs",
   "inputs",
   "section_outputs",
@@ -60,6 +64,31 @@
    "in_standard_filter": 1,
    "label": "Cutting Job",
    "options": "Cutting Job"
+  },
+  {
+   "fieldname": "section_customer",
+   "fieldtype": "Section Break",
+   "label": "Customer / Specification"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer_display",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customer Display",
+   "read_only": 1
   },
   {
    "fieldname": "section_inputs",

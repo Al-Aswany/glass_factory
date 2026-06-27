@@ -17,9 +17,7 @@ RAW_SHEET_ITEM = "GLS-CLEAR-8MM-3210X2250"
 
 
 def _full_spec_kwargs(**overrides):
-	qty = overrides.pop("qty", 10)
 	values = _base_spec_kwargs(
-		qty=qty,
 		polish=1,
 		hole_count=2,
 		special_hole_count=1,
@@ -136,13 +134,9 @@ class TestGlassProductSpecificationItems(IntegrationTestCase):
 		frappe.db.commit()
 
 	def test_missing_raw_sheet_item_fails(self):
-		doc = _new_spec()
-		doc.insert()
-		with self.assertRaises(frappe.ValidationError) as ctx:
-			doc.generate_items()
-		self.assertIn("Raw Sheet Item is required before generating items.", str(ctx.exception))
-		doc.delete()
-		frappe.db.commit()
+		doc = _new_spec(raw_sheet_item=None)
+		with self.assertRaises(frappe.ValidationError):
+			doc.insert()
 
 	def test_invalid_raw_sheet_role_fails(self):
 		final_code = "GLS-CLEAR-8MM-1200X800-POL"

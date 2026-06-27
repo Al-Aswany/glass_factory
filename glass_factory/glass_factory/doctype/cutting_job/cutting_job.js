@@ -48,6 +48,17 @@ frappe.ui.form.on("Cutting Job", {
 	add_custom_buttons(frm) {
 		if (frm.doc.docstatus !== 1) return;
 
+		const specNames = [...new Set(
+			(frm.doc.pieces || [])
+				.filter((row) => row.from_glass_specification && row.glass_specification)
+				.map((row) => row.glass_specification)
+		)];
+		if (specNames.length === 1) {
+			frm.add_custom_button(__("Open Glass Specification"), () => {
+				frappe.set_route("Form", "Glass Product Specification", specNames[0]);
+			});
+		}
+
 		frm.add_custom_button(__("Export Optimization Job"), () => {
 			frappe.call({
 				method: "glass_factory.glass_factory.glass_optimizer.export_optimization_job",
@@ -132,9 +143,13 @@ frappe.ui.form.on("Cutting Job", {
 		if (frm.doc.status === "Cut Stock Posted" || frm.doc.status === "Processing Started") {
 			frm.add_custom_button(__("Start Processing"), () => {
 				frm.call("start_processing").then(({ message }) => {
-					const processing_job = message?.processing_job;
-					if (processing_job) {
-						frappe.set_route("Form", "Glass Processing Job", processing_job);
+					const route = message?.doctype && message?.name
+						? [message.doctype, message.name]
+						: message?.processing_job
+							? ["Glass Processing Job", message.processing_job]
+							: null;
+					if (route) {
+						frappe.set_route("Form", route[0], route[1]);
 					} else {
 						frm.reload_doc();
 					}

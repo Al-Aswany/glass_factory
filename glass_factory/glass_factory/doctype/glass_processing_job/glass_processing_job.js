@@ -9,7 +9,21 @@ frappe.ui.form.on("Glass Processing Job", {
 			"Cancelled": "red",
 		};
 		frm.page.set_indicator(frm.doc.status, color_map[frm.doc.status] || "gray");
+		frm.trigger("add_spec_buttons");
 		frm.trigger("add_dynamic_actions");
+	},
+
+	add_spec_buttons(frm) {
+		const specs = [...new Set(
+			(frm.doc.inputs || [])
+				.map((row) => row.glass_specification)
+				.filter(Boolean)
+		)];
+		specs.forEach((spec_name) => {
+			frm.add_custom_button(__("Open Glass Specification"), () => {
+				frappe.set_route("Form", "Glass Product Specification", spec_name);
+			}, __("Specification"));
+		});
 	},
 
 	add_dynamic_actions(frm) {

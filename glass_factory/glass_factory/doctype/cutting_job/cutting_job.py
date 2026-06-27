@@ -7,6 +7,16 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 from glass_factory.glass_factory.item_resolver import get_item_glass_meta, item_role
+from glass_factory.glass_factory.spec_production import (
+	build_cutting_piece_from_so_item,
+	build_processing_input_row,
+	build_processing_operations_from_piece,
+	build_processing_output_row,
+	is_glass_production_row,
+	piece_has_processing,
+	resolve_processing_job_customer,
+	sales_order_has_glass_production_items,
+)
 from glass_factory.glass_factory.settings_validation import get_raw_warehouse
 from glass_factory.glass_factory.stock_posting import build_cutting_repack
 
@@ -44,27 +54,12 @@ class CuttingJob(Document):
 			if so.docstatus != 1:
 				frappe.throw(f"Sales Order {so.name} must be submitted before cutting.")
 			for item in so.items:
-				if not item.get("gf_is_glass_item"):
+				if not is_glass_production_row(item):
 					continue
 				remaining = flt(item.qty) - self._assigned_qty(item.name)
 				if remaining <= 0:
 					continue
-				self.append("pieces", {
-					"sales_order": so.name,
-					"sales_order_item": item.name,
-					"customer": so.customer,
-					"raw_sheet_item": item.gf_raw_sheet_item,
-					"cut_wip_item": item.gf_cut_wip_item,
-					"final_item": item.gf_final_item or item.item_code,
-					"length_mm": item.gf_length_mm,
-					"width_mm": item.gf_width_mm,
-					"thickness_mm": item.gf_thickness_mm,
-					"processing_flags": item.gf_processing_flags,
-					"glass_specification": item.gf_glass_specification,
-					"qty_required": remaining,
-					"qty_assigned": remaining,
-					"qty_cut": remaining,
-				})
+				self.append("pieces", build_cutting_piece_from_so_item(so, item, remaining))
 		self._populate_source_sheets_from_pieces()
 		self.status = "Planned"
 
@@ -95,6 +90,7 @@ class CuttingJob(Document):
 	def create_repack_stock_entry(self):
 		if self.docstatus != 1:
 			frappe.throw("Submit the Cutting Job before creating a stock movement.")
+		self._validate_source_sheet_batches()
 		if self.linked_stock_entry:
 			return {"stock_entry": self.linked_stock_entry}
 		se = build_cutting_repack(self)
@@ -142,23 +138,15 @@ class CuttingJob(Document):
 			qty = flt(piece.get("qty_cut") or piece.get("qty_required"))
 			if qty <= 0:
 				continue
-			job.append("inputs", {
-				"cut_wip_item": piece.cut_wip_item,
-				"sales_order": piece.sales_order,
-				"sales_order_item": piece.sales_order_item,
-				"glass_specification": piece.glass_specification,
-				"qty": qty,
-			})
-			job.append("outputs", {
-				"final_item": piece.final_item,
-				"sales_order": piece.sales_order,
-				"sales_order_item": piece.sales_order_item,
-				"glass_specification": piece.glass_specification,
-				"qty": qty,
-			})
-			for flag in (piece.get("processing_flags") or "").split("-"):
-				if flag:
-					job.append("operations", {"operation": flag, "sales_order": piece.sales_order, "sales_order_item": piece.sales_order_item, "qty": qty, "status": "Pending"})
+			job.append("inputs", build_processing_input_row(piece, qty))
+			job.append("outputs", build_processing_output_row(piece, qty))
+			for operation in build_processing_operations_from_piece(piece, qty):
+				job.append("operations", operation)
+
+		customer, customer_name, customer_display = resolve_processing_job_customer(self.pieces)
+		job.customer = customer
+		job.customer_name = customer_name
+		job.customer_display = customer_display
 		job.insert(ignore_permissions=True)
 		self.linked_processing_job = job.name
 		self.save(ignore_permissions=True)
@@ -179,7 +167,12 @@ class CuttingJob(Document):
 		self.save(ignore_permissions=True)
 		if self.linked_stock_entry and frappe.db.exists("Stock Entry", self.linked_stock_entry):
 			frappe.db.set_value("Stock Entry", self.linked_stock_entry, "gf_processing_job", processing_job, update_modified=False)
-		return {"message": "Processing started.", "processing_job": processing_job}
+		return {
+			"message": "Processing started.",
+			"doctype": "Glass Processing Job",
+			"name": processing_job,
+			"processing_job": processing_job,
+		}
 
 	@frappe.whitelist()
 	def complete_job(self):
@@ -242,13 +235,10 @@ class CuttingJob(Document):
 					f"{other_jobs_qty + assigned_total} exceeds ordered quantity {ordered_qty}."
 				)
 
-	def _validate_source_sheets(self):
+	def _validate_source_sheet_batches(self):
 		for row in self.get("source_sheets") or []:
 			if not row.item_code:
 				continue
-			role = row.get("source_role") or item_role(row.item_code)
-			if role not in ("Raw Sheet", "Remnant"):
-				frappe.throw(f"Source sheet row {row.idx}: source Item must be Raw Sheet or Remnant.")
 			if not row.get("batch_no"):
 				frappe.throw(f"Source sheet row {row.idx}: Batch is required.")
 
@@ -261,12 +251,16 @@ class CuttingJob(Document):
 				row.get("source_role"),
 			)
 
+	def _validate_source_sheets(self):
+		for row in self.get("source_sheets") or []:
+			if not row.item_code:
+				continue
+			role = row.get("source_role") or item_role(row.item_code)
+			if role not in ("Raw Sheet", "Remnant"):
+				frappe.throw(f"Source sheet row {row.idx}: source Item must be Raw Sheet or Remnant.")
+
 	def _processing_required(self) -> bool:
-		return any(
-			flag
-			for piece in self.get("pieces") or []
-			for flag in (piece.get("processing_flags") or "").split("-")
-		)
+		return any(piece_has_processing(piece) for piece in self.get("pieces") or [])
 
 	def _assigned_qty(self, so_item_name):
 		filters = {
@@ -315,7 +309,7 @@ def make_cutting_job(source_name, target_doc=None):
 	source = frappe.get_doc("Sales Order", source_name)
 	if source.docstatus != 1:
 		frappe.throw("Sales Order must be submitted before creating a Cutting Job.")
-	if not any(item.get("gf_is_glass_item") for item in source.items):
+	if not sales_order_has_glass_production_items(source):
 		frappe.throw("Sales Order has no glass items.")
 
 	if target_doc:

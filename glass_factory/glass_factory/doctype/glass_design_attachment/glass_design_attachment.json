@@ -48,6 +48,6 @@
  "name": "Glass Design Attachment",
  "owner": "Administrator",
  "permissions": [],
- "sort_order": 50,
+ "sort_order": "ASC",
  "track_changes": 1
 }
