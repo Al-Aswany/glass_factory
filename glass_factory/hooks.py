@@ -149,6 +149,7 @@ doc_events = {
 			"glass_factory.glass_factory.quotation_glass.sync_glass_pieces_to_items",
 			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
 		],
+		"validate": "glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
 		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
 	},
 	"Sales Order": {
@@ -156,7 +157,10 @@ doc_events = {
 			"glass_factory.glass_factory.quotation_glass.sync_glass_pieces_to_items",
 			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
 		],
-		"validate": "glass_factory.glass_factory.selling_validations.resolve_glass_items",
+		"validate": [
+			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
+			"glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
+		],
 		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
 	},
 	"Delivery Note": {

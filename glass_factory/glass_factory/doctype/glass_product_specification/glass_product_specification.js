@@ -85,6 +85,16 @@ frappe.ui.form.on("Glass Product Specification", {
 			frm.add_custom_button(__("Refresh Pricing"), () => {
 				gf_refresh_spec_pricing(frm);
 			});
+
+			if (glass_factory.sync.spec_transaction_buttons_visible(frm)) {
+				frm.add_custom_button(__("Add to Quotation"), () => {
+					glass_factory.sync.show_add_spec_from_spec_dialog(frm, "Quotation");
+				}, __("Create"));
+
+				frm.add_custom_button(__("Add to Sales Order"), () => {
+					glass_factory.sync.show_add_spec_from_spec_dialog(frm, "Sales Order");
+				}, __("Create"));
+			}
 		}
 
 		frm.add_custom_button(__("Refresh Preview"), () => {

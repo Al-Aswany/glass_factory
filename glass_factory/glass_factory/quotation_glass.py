@@ -8,6 +8,7 @@ from frappe.utils import cint, flt
 
 from glass_factory.glass_factory.item_resolver import PROCESS_ORDER, get_item_glass_meta, resolve_row_items
 from glass_factory.glass_factory.piece_pricing import apply_piece_rates, calculate_piece_rates
+from glass_factory.glass_factory.spec_transaction import is_spec_transaction_row
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 
 PIECE_FLAG_FIELDS = (
@@ -30,10 +31,17 @@ def sync_glass_pieces_to_items(doc, method=None):
 	if not glass_pieces:
 		return
 
+	spec_rows = [
+		row.as_dict(convert_dates_to_str=True)
+		for row in doc.get("items") or []
+		if is_spec_transaction_row(row)
+	]
 	manual_rows = [
 		row.as_dict(convert_dates_to_str=True)
 		for row in doc.get("items") or []
-		if not cint(row.get("gf_is_glass_item")) and row.get("item_code")
+		if not cint(row.get("gf_is_glass_item"))
+		and not is_spec_transaction_row(row)
+		and row.get("item_code")
 	]
 	existing_rates = _existing_glass_rates(doc.get("items") or [])
 	existing_delivery_dates = _existing_glass_delivery_dates(doc.get("items") or [])
@@ -60,9 +68,9 @@ def sync_glass_pieces_to_items(doc, method=None):
 		piece.description = row_data.get("description") or row_data["item_name"]
 		synced_rows.append(row_data)
 
-	# Drop stale auto-generated glass lines; keep manual non-glass lines.
+	# Drop stale auto-generated glass lines; keep manual and spec-generated rows.
 	doc.set("items", [])
-	for row in manual_rows + synced_rows:
+	for row in manual_rows + spec_rows + synced_rows:
 		doc.append("items", row)
 
 

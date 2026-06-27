@@ -539,7 +539,12 @@ def generate_items_from_spec(spec) -> dict[str, str]:
 
 def spec_is_used_in_transaction(spec_name: str) -> bool:
 	"""Return True when the specification is referenced by a selling transaction."""
-	# Reserved for later phases when Quotation/Sales Order link fields exist.
+	for child_doctype in ("Quotation Item", "Sales Order Item"):
+		if frappe.db.exists(
+			child_doctype,
+			{"gf_glass_specification": spec_name, "gf_from_glass_specification": 1},
+		):
+			return True
 	return False
 
 

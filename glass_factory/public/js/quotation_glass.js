@@ -55,6 +55,20 @@ function gf_register_glass_piece_handlers(doctype) {
 				filters: { gf_glass_item_role: ["in", ["Raw Sheet", "Remnant"]], disabled: 0 },
 			}));
 			gf_toggle_items_grid(frm);
+			if (!frm.is_new() && frm.doc.docstatus === 0) {
+				frm.add_custom_button(__("Add Glass Specification"), () => {
+					glass_factory.sync.show_add_spec_to_transaction_dialog(frm, doctype);
+				}, __("Glass"));
+
+				const has_spec_rows = (frm.doc.items || []).some(
+					(row) => row.gf_from_glass_specification && row.gf_glass_specification
+				);
+				if (has_spec_rows) {
+					frm.add_custom_button(__("Open Glass Specification"), () => {
+						glass_factory.sync.open_selected_glass_specification(frm);
+					}, __("Glass"));
+				}
+			}
 			// Re-sync only while editing; avoid marking a clean saved draft dirty on reload.
 			if (frm.is_new() || frm.is_dirty()) {
 				gf_maybe_sync_glass_items(frm);

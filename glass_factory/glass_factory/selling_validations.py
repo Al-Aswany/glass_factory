@@ -9,6 +9,7 @@ from erpnext.stock.doctype.item.item import get_item_defaults
 
 from glass_factory.glass_factory.item_resolver import item_role, resolve_row_items, validate_final_item_matches_row
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
+from glass_factory.glass_factory.spec_transaction import SPEC_TRANSACTION_ROW_FIELDS, is_spec_transaction_row
 
 NON_COMMERCIAL_ROLES = ("Raw Sheet", "Cut WIP", "Remnant", "Scrap")
 
@@ -36,6 +37,9 @@ def resolve_glass_items(doc, method=None):
 		_sync_glass_fields_from_quotation(doc)
 
 	for row in doc.get("items") or []:
+		if is_spec_transaction_row(row):
+			_reject_non_commercial_item(row, doc.doctype)
+			continue
 		if cint(row.get("gf_is_glass_item")):
 			if flt(row.qty) <= 0:
 				frappe.throw(f"Row {row.idx}: Quantity must be greater than zero.")
@@ -248,6 +252,6 @@ def _sync_glass_fields_from_quotation(doc) -> None:
 		if not source or not cint(source.gf_is_glass_item):
 			continue
 
-		for fieldname in GLASS_ROW_FIELDS:
+		for fieldname in GLASS_ROW_FIELDS + SPEC_TRANSACTION_ROW_FIELDS:
 			if not row.get(fieldname) and source.get(fieldname) not in (None, ""):
 				row.set(fieldname, source.get(fieldname))

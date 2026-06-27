@@ -17,8 +17,9 @@ RAW_SHEET_ITEM = "GLS-CLEAR-8MM-3210X2250"
 
 
 def _full_spec_kwargs(**overrides):
+	qty = overrides.pop("qty", 10)
 	values = _base_spec_kwargs(
-		qty=10,
+		qty=qty,
 		polish=1,
 		hole_count=2,
 		special_hole_count=1,
