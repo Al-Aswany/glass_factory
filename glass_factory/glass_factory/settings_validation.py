@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import frappe
 
+from glass_factory.glass_factory.operation_rates import OPERATION_PRICING_BASIS
+
 SETTINGS_DOCTYPE = "Glass Factory Settings"
 SETTINGS_ROUTE = "Form/Glass Factory Settings/Glass Factory Settings"
 SETTINGS_HELP = (
@@ -28,6 +30,32 @@ ITEM_GROUP_FIELDS = (
 	("remnant_item_group", "Remnant Item Group"),
 	("scrap_item_group", "Scrap Item Group"),
 )
+
+AREA_UOM_CANDIDATES = ("Square Meter", "Sq m", "Sqm")
+AREA_UOM_ALIASES = frozenset({"sq m", "sqm", "square meter", "m2", "m²"})
+
+
+def get_area_uom() -> str:
+	"""Return an existing area UOM for glass scrap and sheet items."""
+	for candidate in AREA_UOM_CANDIDATES:
+		if frappe.db.exists("UOM", candidate):
+			return candidate
+
+	for uom in frappe.get_all("UOM", pluck="name", limit=500):
+		if (uom or "").strip().lower() in AREA_UOM_ALIASES:
+			return uom
+
+	for fallback in (
+		frappe.db.get_single_value(SETTINGS_DOCTYPE, "default_uom"),
+		"Nos",
+	):
+		if fallback and frappe.db.exists("UOM", fallback):
+			return fallback
+
+	frappe.throw(
+		"No suitable area Unit of Measure found. "
+		"Complete ERPNext setup or create a Square Meter UOM before installing Glass Factory."
+	)
 
 
 def throw_missing_settings() -> None:
@@ -79,6 +107,9 @@ def _collect_setup_errors(settings, scope: str = "items") -> list[str]:
 		errors.extend(_validate_uom(settings))
 		errors.extend(_validate_item_groups(settings, scope))
 		errors.extend(_validate_scrap_item(settings))
+
+	if scope in ("full",):
+		errors.extend(_validate_operation_rates(settings))
 
 	if scope in ("stock", "full"):
 		errors.extend(_validate_warehouses(settings))
@@ -150,6 +181,20 @@ def _validate_uom(settings) -> list[str]:
 			f"Create the UOM or choose another value in Glass Factory Settings."
 		]
 	return []
+
+
+def _validate_operation_rates(settings) -> list[str]:
+	errors: list[str] = []
+	for row in settings.get("operation_rates") or []:
+		if not row.get("operation"):
+			continue
+		expected = OPERATION_PRICING_BASIS.get(row.operation)
+		if expected and row.pricing_basis != expected:
+			errors.append(
+				f"Operation <b>{row.operation}</b> must use pricing basis "
+				f"<b>{expected}</b> (not <b>{row.pricing_basis}</b>)."
+			)
+	return errors
 
 
 def _validate_scrap_item(settings) -> list[str]:

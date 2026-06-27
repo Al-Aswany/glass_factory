@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import frappe
 from frappe.utils import cint, flt
 
+from glass_factory.glass_factory.settings_validation import get_area_uom
+
 PROCESS_ORDER = ("POL", "BEV", "HOL", "SLT", "TMP", "SBL", "LAM")
 SPEC_OPERATION_ORDER = ("POL", "BEV", "HOL", "SHOL", "SLT", "SSLT", "TMP", "SBL", "LAM")
 VALID_ROLES = ("Raw Sheet", "Cut WIP", "Final", "Remnant", "Scrap")
@@ -203,7 +205,7 @@ def get_scrap_item() -> str:
 	item.item_code = code
 	item.item_name = code
 	item.item_group = _settings_value("scrap_item_group") or _settings_value("default_item_group") or "All Item Groups"
-	item.stock_uom = "Sq m"
+	item.stock_uom = get_area_uom()
 	item.is_stock_item = 1
 	item.gf_glass_item_role = "Scrap"
 	_ensure_item_default_warehouse(item, "Scrap")

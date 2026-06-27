@@ -1,7 +1,9 @@
 import frappe
+from frappe import _
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-from glass_factory.glass_factory.settings_validation import DEMO_ALLOWED_GLASS_TYPES
+from glass_factory.glass_factory.settings_validation import DEMO_ALLOWED_GLASS_TYPES, get_area_uom
+from glass_factory.glass_factory.operation_rates import default_operation_rate_rows
 
 
 GLASS_ROLES = [
@@ -200,8 +202,28 @@ def create_item_groups():
 	frappe.db.commit()
 
 
+def _get_install_company():
+	default_company = frappe.defaults.get_defaults().company
+	if default_company and frappe.db.exists("Company", default_company):
+		return default_company
+
+	company = frappe.db.get_value("Company", {"is_group": 0}, "name")
+	if company:
+		return company
+
+	return frappe.db.get_value("Company", {}, "name")
+
+
 def create_warehouses():
-	company = frappe.get_value("Company", {"is_group": 0}, "name") or "Default Company"
+	company = _get_install_company()
+	if not company:
+		frappe.throw(
+			_(
+				"Glass Factory requires at least one Company. "
+				"Complete the ERPNext Setup Wizard or create a Company before installing this app."
+			)
+		)
+
 	abbr = frappe.get_value("Company", company, "abbr") or company[:4].upper()
 	for wh_name in ("Glass Raw Stock", "Glass Cut WIP", "Glass Final Goods", "Glass Remnants", "Glass Scrap"):
 		full_name = f"{wh_name} - {abbr}"
@@ -236,8 +258,26 @@ def seed_glass_factory_settings(abbr):
 	settings.min_remnant_side_mm = settings.min_remnant_side_mm or 100
 	settings.min_chargeable_area_m2 = settings.min_chargeable_area_m2 or 0.05
 	settings.enable_cop = 0
+	ensure_default_operation_rates(settings)
 	settings.save(ignore_permissions=True)
 	frappe.db.commit()
+
+
+def ensure_default_operation_rates(settings):
+	"""Seed flexible operation rates when the table is empty."""
+	if settings.get("operation_rates"):
+		return
+
+	currency = _get_default_company_currency()
+	for row in default_operation_rate_rows(currency):
+		settings.append("operation_rates", row)
+
+
+def _get_default_company_currency() -> str:
+	company = frappe.defaults.get_global_default("company")
+	if company:
+		return frappe.get_cached_value("Company", company, "default_currency") or "USD"
+	return frappe.db.get_value("Company", {"is_group": 0}, "default_currency") or "USD"
 
 
 def _ensure_scrap_item():
@@ -248,7 +288,7 @@ def _ensure_scrap_item():
 	item.item_code = item_code
 	item.item_name = item_code
 	item.item_group = "Glass Scrap" if frappe.db.exists("Item Group", "Glass Scrap") else "All Item Groups"
-	item.stock_uom = "Sq m"
+	item.stock_uom = get_area_uom()
 	item.is_stock_item = 1
 	item.is_sales_item = 0
 	item.is_purchase_item = 0

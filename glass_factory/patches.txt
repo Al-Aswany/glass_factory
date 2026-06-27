@@ -16,6 +16,7 @@ glass_factory.patches.v0_0.setup_uat_demo_hardening
 glass_factory.patches.v0_0.backfill_glass_item_default_warehouses
 glass_factory.patches.v0_0.setup_batch_tracking
 glass_factory.patches.v0_0.setup_spec_pricing_phase3
+glass_factory.patches.v0_0.seed_default_operation_rates
 glass_factory.patches.v0_0.setup_spec_transaction_phase4
 glass_factory.patches.v0_0.setup_spec_production_phase5
 # Patches added in this section will be executed after doctypes are migrated

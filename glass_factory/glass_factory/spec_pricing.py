@@ -5,6 +5,7 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint, flt
 
+from glass_factory.glass_factory.operation_rates import OPERATION_PRICING_BASIS
 from glass_factory.glass_factory.piece_pricing import chargeable_area_m2, get_item_selling_rate
 
 AREA_OPERATIONS = frozenset({"Temper", "Sandblast", "Laminate"})
@@ -14,18 +15,6 @@ UNIT_OPERATIONS = {
 	"Special Hole": "special_hole_count",
 	"Slot": "slot_count",
 	"Special Slot": "special_slot_count",
-}
-
-OPERATION_PRICING_BASIS = {
-	"Polish": "Per Edge Meter",
-	"Bevel": "Per Edge Meter",
-	"Hole": "Per Unit",
-	"Special Hole": "Per Unit",
-	"Slot": "Per Unit",
-	"Special Slot": "Per Unit",
-	"Temper": "Per Square Meter",
-	"Sandblast": "Per Square Meter",
-	"Laminate": "Per Square Meter",
 }
 
 BOOLEAN_OPERATION_FIELDS = {

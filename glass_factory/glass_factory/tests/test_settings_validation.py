@@ -68,6 +68,27 @@ class TestSettingsValidation(IntegrationTestCase):
 	def test_runtime_setup_passes_with_seeded_settings(self):
 		require_runtime_setup(scope="stock")
 
+	def test_invalid_operation_pricing_basis_raises_clear_message(self):
+		settings = frappe.get_single("Glass Factory Settings")
+		settings.append(
+			"operation_rates",
+			{
+				"operation": "Polish",
+				"currency": "USD",
+				"pricing_basis": "Per Square Meter",
+				"rate": 5,
+				"enabled": 1,
+			},
+		)
+		try:
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				validate_settings_document(settings)
+			message = str(ctx.exception)
+			self.assertIn("Polish", message)
+			self.assertIn("Per Edge Meter", message)
+		finally:
+			settings.reload()
+
 	def test_invalid_glass_type_lists_allowed_types(self):
 		with patch("glass_factory.glass_factory.item_resolver._settings_value", return_value="CLEAR\nBRONZE"):
 			with self.assertRaises(frappe.ValidationError) as ctx:

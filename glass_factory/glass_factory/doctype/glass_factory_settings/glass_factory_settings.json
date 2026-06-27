@@ -283,7 +283,7 @@
    "label": "Laminated Cost (per m\u00b2)"
   },
   {
-   "description": "Flexible operation rates used by Glass Product Specification pricing. Legacy fields above remain for Quotation Glass Piece pricing.",
+   "description": "Flexible operation rates used by Glass Product Specification pricing. Polish and Bevel are priced per edge meter; Hole, Special Hole, Slot, and Special Slot per unit; Temper, Sandblast, and Laminate per square meter. Legacy fields above remain for Quotation Glass Piece pricing.",
    "fieldname": "operation_rates_section",
    "fieldtype": "Section Break",
    "label": "Operation Rates (Flexible)"
