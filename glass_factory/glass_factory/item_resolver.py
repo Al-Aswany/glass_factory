@@ -10,6 +10,7 @@ import frappe
 from frappe.utils import cint, flt
 
 PROCESS_ORDER = ("POL", "BEV", "HOL", "SLT", "TMP", "SBL", "LAM")
+SPEC_OPERATION_ORDER = ("POL", "BEV", "HOL", "SHOL", "SLT", "SSLT", "TMP", "SBL", "LAM")
 VALID_ROLES = ("Raw Sheet", "Cut WIP", "Final", "Remnant", "Scrap")
 BATCH_TRACKED_ROLES = ("Raw Sheet", "Remnant", "Cut WIP", "Final")
 DEFAULT_GLASS_TYPES = ("CLEAR",)
@@ -351,6 +352,195 @@ def _cut_wip_item_code(spec: GlassSpec) -> str:
 def _final_item_code(spec: GlassSpec) -> str:
 	base = f"GLS-{spec.base_glass_type}-{_fmt_num(spec.thickness_mm)}MM-{_fmt_num(spec.length_mm)}X{_fmt_num(spec.width_mm)}"
 	return f"{base}-{'-'.join(spec.processing_flags)}" if spec.processing_flags else base
+
+
+def build_glass_item_code(
+	glass_type: str,
+	thickness_mm: float,
+	length_mm: float,
+	width_mm: float,
+	*,
+	polish: bool = False,
+	bevel: bool = False,
+	hole_count: int = 0,
+	special_hole_count: int = 0,
+	slot_count: int = 0,
+	special_slot_count: int = 0,
+	temper: bool = False,
+	sandblast: bool = False,
+	laminate: bool = False,
+) -> str:
+	"""Build a deterministic glass item code preview from explicit specification fields."""
+	base = (
+		f"GLS-{_code_part(glass_type)}-{_fmt_num(thickness_mm)}MM-"
+		f"{_fmt_num(length_mm)}X{_fmt_num(width_mm)}"
+	)
+	operations = build_glass_operation_code(
+		polish=polish,
+		bevel=bevel,
+		hole_count=hole_count,
+		special_hole_count=special_hole_count,
+		slot_count=slot_count,
+		special_slot_count=special_slot_count,
+		temper=temper,
+		sandblast=sandblast,
+		laminate=laminate,
+	)
+	return f"{base}-{operations}" if operations else base
+
+
+def build_glass_operation_code(
+	*,
+	polish: bool = False,
+	bevel: bool = False,
+	hole_count: int = 0,
+	special_hole_count: int = 0,
+	slot_count: int = 0,
+	special_slot_count: int = 0,
+	temper: bool = False,
+	sandblast: bool = False,
+	laminate: bool = False,
+) -> str:
+	"""Return the stable operation suffix for a glass specification preview."""
+	parts: list[str] = []
+	count_ops = {
+		"HOL": cint(hole_count),
+		"SHOL": cint(special_hole_count),
+		"SLT": cint(slot_count),
+		"SSLT": cint(special_slot_count),
+	}
+	bool_ops = {
+		"POL": polish,
+		"BEV": bevel,
+		"TMP": temper,
+		"SBL": sandblast,
+		"LAM": laminate,
+	}
+
+	for op in SPEC_OPERATION_ORDER:
+		if op in count_ops:
+			count = count_ops[op]
+			if count > 0:
+				parts.append(f"{op}{count:02d}")
+		elif bool_ops.get(op):
+			parts.append(op)
+
+	return "-".join(parts)
+
+
+def build_final_item_code_from_spec(spec) -> str:
+	"""Build item code preview from a Glass Product Specification document or mapping."""
+	return build_glass_item_code(
+		spec.get("glass_type") if hasattr(spec, "get") else spec.glass_type,
+		flt(spec.get("thickness_mm") if hasattr(spec, "get") else spec.thickness_mm),
+		flt(spec.get("length_mm") if hasattr(spec, "get") else spec.length_mm),
+		flt(spec.get("width_mm") if hasattr(spec, "get") else spec.width_mm),
+		polish=cint(spec.get("polish") if hasattr(spec, "get") else spec.polish),
+		bevel=cint(spec.get("bevel") if hasattr(spec, "get") else spec.bevel),
+		hole_count=cint(spec.get("hole_count") if hasattr(spec, "get") else spec.hole_count),
+		special_hole_count=cint(
+			spec.get("special_hole_count") if hasattr(spec, "get") else spec.special_hole_count
+		),
+		slot_count=cint(spec.get("slot_count") if hasattr(spec, "get") else spec.slot_count),
+		special_slot_count=cint(
+			spec.get("special_slot_count") if hasattr(spec, "get") else spec.special_slot_count
+		),
+		temper=cint(spec.get("temper") if hasattr(spec, "get") else spec.temper),
+		sandblast=cint(spec.get("sandblast") if hasattr(spec, "get") else spec.sandblast),
+		laminate=cint(spec.get("laminate") if hasattr(spec, "get") else spec.laminate),
+	)
+
+
+def spec_from_glass_product_specification(spec) -> GlassSpec:
+	"""Build a cut/final GlassSpec from a Glass Product Specification document."""
+	validate_glass_type(spec.get("glass_type"), context="Glass type")
+	thickness = flt(spec.get("thickness_mm"))
+	length = flt(spec.get("length_mm"))
+	width = flt(spec.get("width_mm"))
+	if thickness <= 0:
+		frappe.throw("Thickness must be greater than zero.")
+	if length <= 0 or width <= 0:
+		frappe.throw("Length and width must be greater than zero.")
+	return GlassSpec(
+		_code_part(spec.get("glass_type")),
+		thickness,
+		length,
+		width,
+		(),
+	)
+
+
+def ensure_raw_item_from_spec(spec) -> str:
+	"""Reuse or create the Raw Sheet Item for a Glass Product Specification."""
+	raw_item = spec.get("raw_sheet_item")
+	if raw_item:
+		raw_doc = frappe.get_doc("Item", raw_item)
+		role = raw_doc.get("gf_glass_item_role") or infer_glass_role_from_item_code(raw_doc.name)
+		if role != "Raw Sheet":
+			frappe.throw("Raw Sheet Item must be a Glass Raw Sheet item.")
+		return raw_doc.name
+
+	length = flt(spec.get("raw_sheet_length_mm"))
+	width = flt(spec.get("raw_sheet_width_mm"))
+	if length <= 0 or width <= 0:
+		frappe.throw("Raw Sheet Item is required before generating items.")
+
+	return ensure_raw_sheet_item(
+		spec.get("glass_type"),
+		flt(spec.get("thickness_mm")),
+		length,
+		width,
+	)
+
+
+def ensure_cut_wip_item_from_spec(spec, raw_doc) -> str:
+	"""Reuse or create the Cut WIP Item for a Glass Product Specification."""
+	glass_spec = spec_from_glass_product_specification(spec)
+	return ensure_cut_wip_item(raw_doc, glass_spec)
+
+
+def ensure_final_item_from_spec(spec, raw_doc) -> str:
+	"""Reuse or create the Final Item using the specification item code preview."""
+	item_code = build_final_item_code_from_spec(spec)
+	if not item_code:
+		frappe.throw("Cannot generate items because the item code preview is empty.")
+
+	glass_spec = spec_from_glass_product_specification(spec)
+	return _ensure_item(
+		item_code=item_code,
+		role="Final",
+		spec=glass_spec,
+		item_group=_settings_value("final_item_group") or _settings_value("default_item_group") or raw_doc.item_group,
+		stock_uom=raw_doc.stock_uom or _settings_value("default_uom") or "Nos",
+	)
+
+
+def generate_items_from_spec(spec) -> dict[str, str]:
+	"""Generate or reuse Raw Sheet, Cut WIP, and Final Items for a specification."""
+	from glass_factory.glass_factory.settings_validation import require_runtime_setup
+
+	require_runtime_setup(scope="items")
+
+	spec.update_item_code_preview()
+	if not spec.item_code_preview:
+		frappe.throw("Cannot generate items because the item code preview is empty.")
+
+	raw_item = ensure_raw_item_from_spec(spec)
+	raw_doc = frappe.get_doc("Item", raw_item)
+	cut_item = ensure_cut_wip_item_from_spec(spec, raw_doc)
+	final_item = ensure_final_item_from_spec(spec, raw_doc)
+
+	return {
+		"raw_item_code": raw_item,
+		"cut_wip_item_code": cut_item,
+		"final_item_code": final_item,
+	}
+
+
+def spec_is_used_in_transaction(spec_name: str) -> bool:
+	"""Return True when the specification is referenced by a selling transaction."""
+	# Reserved for later phases when Quotation/Sales Order link fields exist.
+	return False
 
 
 def _parse_raw_item_code(item_code: str) -> dict[str, str | float]:
