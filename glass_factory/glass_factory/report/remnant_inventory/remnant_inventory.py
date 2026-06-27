@@ -92,7 +92,7 @@ def _data(filters: Dict) -> List[Dict]:
 	for b in bins:
 		bins_by_item[b["item_code"]].append(b)
 
-	# Source cutting jobs by item (most recent serial wins)
+	# Source cutting jobs by item (most recent batch wins)
 	jobs_by_item = _cutting_jobs_for_items(item_codes)
 
 	now = frappe.utils.now_datetime()
@@ -180,15 +180,15 @@ def _size_bucket(area_m2: float) -> str:
 
 
 def _cutting_jobs_for_items(item_codes: List[str]) -> Dict[str, str]:
-	if not item_codes:
+	if not item_codes or not frappe.get_meta("Batch").has_field("gf_cutting_job"):
 		return {}
 	rows = frappe.db.sql(
 		"""
-		SELECT item_code, cutting_job, MAX(creation) AS creation
-		FROM `tabSerial No`
-		WHERE item_code IN %(items)s
-		  AND IFNULL(cutting_job, '') != ''
-		GROUP BY item_code, cutting_job
+		SELECT item, gf_cutting_job, MAX(creation) AS creation
+		FROM `tabBatch`
+		WHERE item IN %(items)s
+		  AND IFNULL(gf_cutting_job, '') != ''
+		GROUP BY item, gf_cutting_job
 		ORDER BY creation DESC
 		""",
 		{"items": tuple(item_codes)},
@@ -196,7 +196,7 @@ def _cutting_jobs_for_items(item_codes: List[str]) -> Dict[str, str]:
 	)
 	out: Dict[str, str] = {}
 	for r in rows:
-		out.setdefault(r["item_code"], r["cutting_job"])
+		out.setdefault(r["item"], r["gf_cutting_job"])
 	return out
 
 

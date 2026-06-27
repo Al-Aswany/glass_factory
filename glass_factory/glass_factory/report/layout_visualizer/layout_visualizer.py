@@ -106,7 +106,7 @@ def _load_excel_rows(file_url: str) -> List[Dict]:
 def _sheet_meta(job, sheet_idx: int) -> Dict:
 	"""Return source-sheet metadata for a given sheet index (1-based)."""
 	if not job.source_sheets:
-		return {"length_mm": 0, "width_mm": 0, "item_code": "", "serial_no": ""}
+		return {"length_mm": 0, "width_mm": 0, "item_code": "", "batch_no": ""}
 
 	idx = max(1, min(sheet_idx, len(job.source_sheets))) - 1
 	src = job.source_sheets[idx]
@@ -114,7 +114,7 @@ def _sheet_meta(job, sheet_idx: int) -> Dict:
 		"length_mm": float(src.length_mm or 0),
 		"width_mm": float(src.width_mm or 0),
 		"item_code": src.item_code or "",
-		"serial_no": src.serial_no or "",
+		"batch_no": src.batch_no or "",
 	}
 
 
@@ -245,8 +245,8 @@ def _render_sheet_card(sheet_idx: int, pieces: List[Dict], meta: Dict, color_map
 	source_label = ""
 	if meta["item_code"]:
 		source_label = f' • {frappe.utils.escape_html(meta["item_code"])}'
-		if meta["serial_no"]:
-			source_label += f' #{frappe.utils.escape_html(meta["serial_no"])}'
+		if meta["batch_no"]:
+			source_label += f' #{frappe.utils.escape_html(meta["batch_no"])}'
 
 	return f"""
 	<div class="lv-card">

@@ -162,6 +162,13 @@ def create_glass_custom_fields():
 			{"fieldname": "gf_glass_specification", "label": "Glass Specification", "fieldtype": "Data", "insert_after": "gf_sales_order_item"},
 			{"fieldname": "gf_source_item_role", "label": "Source Item Role", "fieldtype": "Select", "options": "\nRaw Sheet\nCut WIP\nFinal\nRemnant\nScrap", "insert_after": "gf_glass_specification"},
 		],
+		"Batch": [
+			{"fieldname": "gf_glass_section", "fieldtype": "Section Break", "label": "Glass", "insert_after": "item", "collapsible": 1},
+			{"fieldname": "gf_cutting_job", "label": "Source Cutting Job", "fieldtype": "Link", "options": "Cutting Job", "insert_after": "gf_glass_section"},
+			{"fieldname": "gf_length_mm", "label": "Length (mm)", "fieldtype": "Float", "insert_after": "gf_cutting_job"},
+			{"fieldname": "gf_width_mm", "label": "Width (mm)", "fieldtype": "Float", "insert_after": "gf_length_mm"},
+			{"fieldname": "gf_area_m2", "label": "Area (m²)", "fieldtype": "Float", "insert_after": "gf_width_mm", "read_only": 1},
+		],
 	}
 
 	create_custom_fields(custom_fields, ignore_validate=True)

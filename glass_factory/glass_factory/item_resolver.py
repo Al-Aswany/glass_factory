@@ -11,6 +11,7 @@ from frappe.utils import cint, flt
 
 PROCESS_ORDER = ("POL", "BEV", "HOL", "SLT", "TMP", "SBL", "LAM")
 VALID_ROLES = ("Raw Sheet", "Cut WIP", "Final", "Remnant", "Scrap")
+BATCH_TRACKED_ROLES = ("Raw Sheet", "Remnant", "Cut WIP", "Final")
 DEFAULT_GLASS_TYPES = ("CLEAR",)
 ROLE_WAREHOUSE_FIELDS = {
 	"Raw Sheet": "raw_warehouse",
@@ -261,6 +262,9 @@ def _ensure_item(item_code: str, role: str, spec: GlassSpec, item_group: str, st
 	item.include_item_in_manufacturing = 0
 	item.is_sales_item = 1 if role == "Final" else 0
 	item.is_purchase_item = 1 if role in ("Raw Sheet", "Remnant") else 0
+	if role in BATCH_TRACKED_ROLES:
+		item.has_batch_no = 1
+		item.has_serial_no = 0
 	_update_glass_item_fields(item, role, spec)
 	_ensure_item_default_warehouse(item, role)
 	try:
@@ -276,6 +280,13 @@ def _update_glass_item_fields(item, role: str, spec: GlassSpec) -> None:
 	if item.get("gf_glass_item_role") != role:
 		item.gf_glass_item_role = role
 		changed = True
+	if role in BATCH_TRACKED_ROLES:
+		if not cint(item.get("has_batch_no")):
+			item.has_batch_no = 1
+			changed = True
+		if cint(item.get("has_serial_no")):
+			item.has_serial_no = 0
+			changed = True
 	if _ensure_item_default_warehouse(item, role):
 		changed = True
 	if changed and not item.is_new():

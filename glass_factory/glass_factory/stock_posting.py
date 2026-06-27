@@ -7,6 +7,7 @@ from frappe.utils import flt, nowdate, nowtime
 
 from erpnext.stock.utils import get_incoming_rate
 
+from glass_factory.glass_factory.batch_utils import batch_row_fields, ensure_remnant_batch
 from glass_factory.glass_factory.item_resolver import (
 	_parse_raw_item_code,
 	ensure_remnant_item,
@@ -55,7 +56,7 @@ def build_cutting_repack(cutting_job):
 		role = source.get("source_role") or item_role(source.item_code)
 		if role not in ("Raw Sheet", "Remnant"):
 			frappe.throw(f"Source sheet row {source.idx}: Item must be Raw Sheet or Remnant.")
-		se.append("items", {
+		row_data = {
 			"item_code": source.item_code,
 			"gf_cutting_job": cutting_job.name,
 			"s_warehouse": source.warehouse or settings.raw_warehouse,
@@ -64,9 +65,10 @@ def build_cutting_repack(cutting_job):
 			"uom": _stock_uom(source.item_code),
 			"stock_uom": _stock_uom(source.item_code),
 			"conversion_factor": 1,
-			"serial_no": source.get("serial_no"),
 			"gf_source_item_role": role,
-		})
+		}
+		row_data.update(batch_row_fields(source.item_code, source.get("batch_no")))
+		se.append("items", row_data)
 
 	for piece in cutting_job.get("pieces") or []:
 		qty = flt(piece.get("qty_cut") or piece.get("qty_required") or piece.get("qty") or 0)
@@ -98,18 +100,16 @@ def build_cutting_repack(cutting_job):
 		for source in cutting_job.get("source_sheets") or []:
 			if flt(source.get("remnant_qty")) > 0:
 				remnant_item = source.get("remnant_item") or ensure_remnant_item(source.item_code, source.remnant_length_mm, source.remnant_width_mm)
-				se.append("items", {
-					"item_code": remnant_item,
-					"gf_cutting_job": cutting_job.name,
-					"t_warehouse": settings.remnants_warehouse,
-					"qty": flt(source.remnant_qty),
-					"transfer_qty": flt(source.remnant_qty),
-					"uom": _stock_uom(remnant_item),
-					"stock_uom": _stock_uom(remnant_item),
-					"conversion_factor": 1,
-					"is_finished_item": 1,
-					"gf_source_item_role": "Remnant",
-				})
+				_append_remnant_row(
+					se,
+					cutting_job.name,
+					remnant_item,
+					settings.remnants_warehouse,
+					flt(source.remnant_qty),
+					flt(source.remnant_length_mm),
+					flt(source.remnant_width_mm),
+					row_key=f"SRC{source.idx}",
+				)
 			if flt(source.get("scrap_qty")) > 0:
 				scrap_item = get_scrap_item()
 				se.append("items", {
@@ -130,6 +130,40 @@ def build_cutting_repack(cutting_job):
 
 	_allocate_cutting_repack_rates(se, cutting_job)
 	return se
+
+
+def _append_remnant_row(
+	se,
+	cutting_job_name: str,
+	remnant_item: str,
+	warehouse: str,
+	qty: float,
+	length_mm: float,
+	width_mm: float,
+	*,
+	row_key: str,
+) -> None:
+	batch_no = ensure_remnant_batch(
+		remnant_item,
+		cutting_job_name,
+		length_mm,
+		width_mm,
+		row_key=row_key,
+	)
+	row_data = {
+		"item_code": remnant_item,
+		"gf_cutting_job": cutting_job_name,
+		"t_warehouse": warehouse,
+		"qty": qty,
+		"transfer_qty": qty,
+		"uom": _stock_uom(remnant_item),
+		"stock_uom": _stock_uom(remnant_item),
+		"conversion_factor": 1,
+		"is_finished_item": 1,
+		"gf_source_item_role": "Remnant",
+	}
+	row_data.update(batch_row_fields(remnant_item, batch_no))
+	se.append("items", row_data)
 
 
 def _sheet_id(idx: int) -> str:
@@ -174,18 +208,16 @@ def _append_optimization_outputs(se, cutting_job, settings) -> None:
 		remnant_item = ensure_remnant_item(
 			base_item, flt(remnant.get("length_mm")), flt(remnant.get("width_mm"))
 		)
-		se.append("items", {
-			"item_code": remnant_item,
-			"gf_cutting_job": cutting_job.name,
-			"t_warehouse": settings.remnants_warehouse,
-			"qty": qty,
-			"transfer_qty": qty,
-			"uom": _stock_uom(remnant_item),
-			"stock_uom": _stock_uom(remnant_item),
-			"conversion_factor": 1,
-			"is_finished_item": 1,
-			"gf_source_item_role": "Remnant",
-		})
+		_append_remnant_row(
+			se,
+			cutting_job.name,
+			remnant_item,
+			settings.remnants_warehouse,
+			qty,
+			flt(remnant.get("length_mm")),
+			flt(remnant.get("width_mm")),
+			row_key=remnant.get("name") or f"{remnant.get('source_sheet_id')}-{int(remnant.get('length_mm') or 0)}x{int(remnant.get('width_mm') or 0)}",
+		)
 
 	waste_area_m2 = flt(cutting_job.get("optimization_waste_area_m2"))
 	if waste_area_m2 > 0:
@@ -335,7 +367,7 @@ def _source_row_rate(se, row) -> float:
 			"voucher_type": se.doctype,
 			"voucher_no": se.name,
 			"company": se.company,
-			"serial_no": row.get("serial_no"),
+			"batch_no": row.get("batch_no"),
 		}
 	)
 	rate = flt(get_incoming_rate(args, raise_error_if_no_rate=False))

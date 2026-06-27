@@ -167,8 +167,8 @@ doc_events = {
 		"before_validate": "glass_factory.glass_factory.stock_entry_hooks.prepare_glass_stock_entry",
 		"validate": "glass_factory.glass_factory.selling_validations.validate_stock_entry",
 	},
-	"Serial No": {
-		"before_save": "glass_factory.glass_factory.serial_no_hooks.compute_area",
+	"Batch": {
+		"before_save": "glass_factory.glass_factory.batch_hooks.compute_area",
 	},
 	"Item": {
 		"validate": "glass_factory.glass_factory.item_glass_hooks.validate_glass_item",
