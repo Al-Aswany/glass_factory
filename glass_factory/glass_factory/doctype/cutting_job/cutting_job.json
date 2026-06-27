@@ -16,6 +16,19 @@
   "pieces",
   "section_source_sheets",
   "source_sheets",
+  "section_optimization",
+  "optimization_status",
+  "optimization_message",
+  "column_break_optimization",
+  "optimization_waste_area_m2",
+  "optimization_job_file",
+  "optimization_result_file",
+  "optimization_exported_at",
+  "optimization_imported_at",
+  "section_optimization_results",
+  "optimization_used_sheets",
+  "optimization_placed_pieces",
+  "optimization_remnants",
   "section_cop",
   "cop_files",
   "section_links",
@@ -41,6 +54,7 @@
    "default": "Draft",
    "fieldname": "status",
    "fieldtype": "Select",
+   "allow_on_submit": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
@@ -87,6 +101,96 @@
    "fieldtype": "Table",
    "label": "Source Sheets",
    "options": "Cutting Job Source Sheet"
+  },
+  {
+   "fieldname": "section_optimization",
+   "fieldtype": "Section Break",
+   "label": "Glass Optimizer"
+  },
+  {
+   "default": "Not Exported",
+   "fieldname": "optimization_status",
+   "fieldtype": "Select",
+   "allow_on_submit": 1,
+   "in_list_view": 1,
+   "label": "Optimization Status",
+   "options": "Not Exported\nExported\nImported\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_message",
+   "fieldtype": "Small Text",
+   "allow_on_submit": 1,
+   "label": "Optimization Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_optimization",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "optimization_waste_area_m2",
+   "fieldtype": "Float",
+   "allow_on_submit": 1,
+   "label": "Optimization Waste Area (m²)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_job_file",
+   "fieldtype": "Attach",
+   "allow_on_submit": 1,
+   "label": "Optimization Job File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_result_file",
+   "fieldtype": "Attach",
+   "allow_on_submit": 1,
+   "label": "Optimization Result File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_exported_at",
+   "fieldtype": "Datetime",
+   "allow_on_submit": 1,
+   "label": "Optimization Exported At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_imported_at",
+   "fieldtype": "Datetime",
+   "allow_on_submit": 1,
+   "label": "Optimization Imported At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_optimization_results",
+   "fieldtype": "Section Break",
+   "label": "Optimization Results"
+  },
+  {
+   "fieldname": "optimization_used_sheets",
+   "fieldtype": "Table",
+   "allow_on_submit": 1,
+   "label": "Used Sheets",
+   "options": "Cutting Job Optimization Used Sheet",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_placed_pieces",
+   "fieldtype": "Table",
+   "allow_on_submit": 1,
+   "label": "Placed Pieces",
+   "options": "Cutting Job Optimization Placed Piece",
+   "read_only": 1
+  },
+  {
+   "fieldname": "optimization_remnants",
+   "fieldtype": "Table",
+   "allow_on_submit": 1,
+   "label": "Remnants",
+   "options": "Cutting Job Optimization Remnant",
+   "read_only": 1
   },
   {
    "fieldname": "section_cop",

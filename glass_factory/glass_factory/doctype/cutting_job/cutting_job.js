@@ -21,6 +21,66 @@ frappe.ui.form.on("Cutting Job", {
 	add_custom_buttons(frm) {
 		if (frm.doc.docstatus !== 1) return;
 
+		frm.add_custom_button(__("Export Optimization Job"), () => {
+			frappe.call({
+				method: "glass_factory.glass_factory.glass_optimizer.export_optimization_job",
+				args: { cutting_job_name: frm.doc.name },
+				freeze: true,
+				freeze_message: __("Exporting optimization job..."),
+				callback({ message }) {
+					frappe.show_alert({ message: message.message, indicator: "green" });
+					if (message.file_url) {
+						window.open(message.file_url);
+					}
+					frm.reload_doc();
+				},
+			});
+		}, __("Glass Optimizer"));
+
+		frm.add_custom_button(__("Import Optimization Result"), () => {
+			const input = document.createElement("input");
+			input.type = "file";
+			input.accept = ".json,application/json";
+			input.addEventListener("change", () => {
+				const file = input.files[0];
+				if (!file) return;
+				const reader = new FileReader();
+				reader.addEventListener("load", () => {
+					frappe.call({
+						method: "glass_factory.glass_factory.glass_optimizer.import_optimization_result",
+						args: {
+							cutting_job_name: frm.doc.name,
+							json_text: reader.result,
+						},
+						freeze: true,
+						freeze_message: __("Importing optimization result..."),
+						callback({ message }) {
+							frappe.show_alert({
+								message: __("Optimization result imported successfully."),
+								indicator: "green",
+							});
+							frm.reload_doc();
+						},
+						error(err) {
+							const detail =
+								(err.responseJSON && err.responseJSON.exc_type
+									? err.responseJSON.exception || err.responseJSON.exc_type
+									: null) ||
+								__("Could not import optimization result. Check Error Log for details.");
+							frappe.msgprint({
+								title: __("Import Failed"),
+								message: detail,
+								indicator: "red",
+							});
+							frm.reload_doc();
+						},
+					});
+				});
+				reader.readAsText(file);
+			});
+			input.click();
+		}, __("Glass Optimizer"));
+
 		if (!frm.doc.pieces || !frm.doc.pieces.length) {
 			frm.add_custom_button(__("Pull Sales Orders"), () => {
 				frm.call("pull_from_sales_orders").then(() => frm.reload_doc());

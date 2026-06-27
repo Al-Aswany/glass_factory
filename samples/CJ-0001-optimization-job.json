@@ -1,0 +1,23 @@
+{
+  "cutting_job": "CJ-0001",
+  "material": "CLEAR-8MM",
+  "kerf_mm": 3,
+  "stock_sheets": [
+    {
+      "sheet_id": "SHEET-001",
+      "length_mm": 3660,
+      "width_mm": 2440,
+      "qty": 2
+    }
+  ],
+  "pieces": [
+    {
+      "piece_id": "P1",
+      "item_code": "GLS-CLEAR-8MM-1200X800-POL",
+      "length_mm": 1200,
+      "width_mm": 800,
+      "qty": 5,
+      "process": "POLISHED"
+    }
+  ]
+}

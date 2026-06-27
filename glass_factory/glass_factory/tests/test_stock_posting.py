@@ -7,6 +7,9 @@ from frappe.utils import flt
 from glass_factory.glass_factory.stock_posting import (
 	_allocate_cutting_repack_rates,
 	_item_area_m2,
+	_optimization_active,
+	_validate_optimization_sheets,
+	build_cutting_repack,
 )
 
 
@@ -71,8 +74,6 @@ class TestStockPosting(IntegrationTestCase):
 		self.assertTrue(remnant_row.set_basic_rate_manually)
 
 	def test_cutting_job_is_copied_to_stock_entry_detail_rows(self):
-		from glass_factory.glass_factory.stock_posting import build_cutting_repack
-
 		cutting_job = frappe._dict(
 			name="CJ-TRACE-001",
 			source_sheets=[
@@ -100,3 +101,116 @@ class TestStockPosting(IntegrationTestCase):
 
 		self.assertTrue(se.items)
 		self.assertTrue(all(row.gf_cutting_job == cutting_job.name for row in se.items))
+
+
+def _optimized_job(**overrides):
+	job = frappe._dict({
+		"name": "CJ-OPT-1",
+		"optimization_status": "Imported",
+		"optimization_waste_area_m2": 1.5,
+		"sales_orders": [],
+		"source_sheets": [
+			frappe._dict({
+				"idx": 1,
+				"item_code": "GLS-CLEAR-8MM-3210X2250",
+				"warehouse": "Glass Raw Stock - _TC",
+				"source_role": "Raw Sheet",
+				"qty_consumed": 2,
+			}),
+		],
+		"pieces": [
+			frappe._dict({
+				"idx": 1,
+				"cut_wip_item": "GLS-CLEAR-8MM-1200X800-CUT",
+				"target_warehouse": "Glass Cut WIP - _TC",
+				"qty_cut": 3,
+				"qty_required": 3,
+				"sales_order": None,
+				"sales_order_item": None,
+				"glass_specification": None,
+			}),
+		],
+		"optimization_used_sheets": [
+			frappe._dict({"sheet_id": "SHEET-001", "used_qty": 1}),
+		],
+		"optimization_remnants": [
+			frappe._dict({"source_sheet_id": "SHEET-001", "length_mm": 1000, "width_mm": 600, "qty": 1}),
+			frappe._dict({"source_sheet_id": "SHEET-001", "length_mm": 500, "width_mm": 400, "qty": 2}),
+		],
+	})
+	job.update(overrides)
+	return job
+
+
+def _patched_build(job):
+	"""Run build_cutting_repack with all DB-touching helpers stubbed out."""
+	def fake_role(item_code):
+		return "Cut WIP" if item_code.endswith("-CUT") else "Raw Sheet"
+
+	settings = frappe._dict({
+		"raw_warehouse": "Glass Raw Stock - _TC",
+		"cut_wip_warehouse": "Glass Cut WIP - _TC",
+		"final_goods_warehouse": "Glass Final Goods - _TC",
+		"remnants_warehouse": "Glass Remnants - _TC",
+		"scrap_warehouse": "Glass Scrap - _TC",
+	})
+	base = "glass_factory.glass_factory.stock_posting."
+	with patch(base + "_settings", return_value=settings), \
+		patch(base + "_company_from_job", return_value="_Test Company"), \
+		patch(base + "_stock_uom", return_value="Nos"), \
+		patch(base + "item_role", side_effect=fake_role), \
+		patch(base + "ensure_remnant_item", side_effect=lambda item, length, width: f"{item}-{int(length)}X{int(width)}-REM"), \
+		patch(base + "get_scrap_item", return_value="Glass Scrap"), \
+		patch(base + "_allocate_cutting_repack_rates"):
+		return build_cutting_repack(job)
+
+
+class TestCuttingRepackOptimization(IntegrationTestCase):
+	def test_optimization_active_detection(self):
+		self.assertTrue(_optimization_active(_optimized_job()))
+		self.assertFalse(_optimization_active(_optimized_job(optimization_status="Exported")))
+		self.assertFalse(_optimization_active(_optimized_job(optimization_used_sheets=[])))
+
+	def test_validate_optimization_sheets_rejects_unknown_id(self):
+		job = _optimized_job()
+		with self.assertRaises(frappe.ValidationError):
+			_validate_optimization_sheets(job, {"SHEET-002": 1})
+
+	def test_used_qty_overrides_manual_consumption(self):
+		se = _patched_build(_optimized_job())
+		raw_row = next(r for r in se.items if r.item_code == "GLS-CLEAR-8MM-3210X2250")
+		# manual qty_consumed is 2, but used_sheets says 1
+		self.assertEqual(flt(raw_row.qty), 1)
+		self.assertEqual(flt(raw_row.transfer_qty), 1)
+
+	def test_one_stock_row_per_optimization_remnant(self):
+		se = _patched_build(_optimized_job())
+		remnant_rows = [r for r in se.items if r.gf_source_item_role == "Remnant"]
+		self.assertEqual(len(remnant_rows), 2)
+		codes = {r.item_code for r in remnant_rows}
+		self.assertIn("GLS-CLEAR-8MM-3210X2250-1000X600-REM", codes)
+		self.assertIn("GLS-CLEAR-8MM-3210X2250-500X400-REM", codes)
+		qty_by_code = {r.item_code: flt(r.qty) for r in remnant_rows}
+		self.assertEqual(qty_by_code["GLS-CLEAR-8MM-3210X2250-500X400-REM"], 2)
+
+	def test_scrap_row_sized_from_waste_area(self):
+		se = _patched_build(_optimized_job())
+		scrap_rows = [r for r in se.items if r.gf_source_item_role == "Scrap"]
+		self.assertEqual(len(scrap_rows), 1)
+		self.assertEqual(flt(scrap_rows[0].qty), 1.5)
+
+	def test_no_scrap_row_when_waste_is_zero(self):
+		se = _patched_build(_optimized_job(optimization_waste_area_m2=0))
+		self.assertFalse([r for r in se.items if r.gf_source_item_role == "Scrap"])
+
+	def test_without_optimization_uses_manual_fields(self):
+		job = _optimized_job(
+			optimization_status="Exported",
+			optimization_remnants=[],
+			optimization_waste_area_m2=0,
+		)
+		se = _patched_build(job)
+		raw_row = next(r for r in se.items if r.item_code == "GLS-CLEAR-8MM-3210X2250")
+		# falls back to manual qty_consumed of 2
+		self.assertEqual(flt(raw_row.qty), 2)
+		self.assertFalse([r for r in se.items if r.gf_source_item_role in ("Remnant", "Scrap")])

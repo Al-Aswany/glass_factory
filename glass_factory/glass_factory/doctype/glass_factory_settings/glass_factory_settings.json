@@ -26,6 +26,7 @@
   "min_remnant_area_m2",
   "min_remnant_side_mm",
   "min_chargeable_area_m2",
+  "kerf_mm",
   "enable_cop",
   "pricing_section",
   "polish_rate_per_m2",
@@ -165,6 +166,12 @@
    "fieldname": "min_chargeable_area_m2",
    "fieldtype": "Float",
    "label": "Min Chargeable Area (m\u00b2)"
+  },
+  {
+   "default": "3",
+   "fieldname": "kerf_mm",
+   "fieldtype": "Float",
+   "label": "Kerf (mm)"
   },
   {
    "default": "0",

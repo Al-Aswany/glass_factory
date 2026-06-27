@@ -17,10 +17,24 @@ from glass_factory.glass_factory.settings_validation import get_validated_stock_
 
 
 def build_cutting_repack(cutting_job):
-	"""Build Repack #1: Raw Sheet/Remnant -> Cut WIP + Remnant + Scrap."""
+	"""Build Repack #1: Raw Sheet/Remnant -> Cut WIP + Remnant + Scrap.
+
+	When an imported GlassOptimizer result is present, the consumed sheet
+	quantities, remnant outputs and scrap are driven by that result instead of
+	the manually-entered source sheet fields.
+	"""
 	_validate_cutting_job(cutting_job)
 	settings = _settings()
 	company = _company_from_job(cutting_job)
+
+	use_optimization = _optimization_active(cutting_job)
+	used_qty_by_sheet_id: dict[str, float] = {}
+	if use_optimization:
+		used_qty_by_sheet_id = {
+			row.sheet_id: flt(row.used_qty)
+			for row in cutting_job.get("optimization_used_sheets") or []
+		}
+		_validate_optimization_sheets(cutting_job, used_qty_by_sheet_id)
 
 	se = frappe.new_doc("Stock Entry")
 	se.stock_entry_type = "Repack"
@@ -32,8 +46,10 @@ def build_cutting_repack(cutting_job):
 	se.gf_glass_stock_flow = "Raw to Cut WIP"
 	se.gf_created_by_glass_factory = 1
 
-	for source in cutting_job.get("source_sheets") or []:
+	for idx, source in enumerate(cutting_job.get("source_sheets") or [], start=1):
 		qty = flt(source.get("qty_consumed") or source.get("qty") or 1)
+		if use_optimization:
+			qty = used_qty_by_sheet_id.get(_sheet_id(idx), qty)
 		if qty <= 0:
 			continue
 		role = source.get("source_role") or item_role(source.item_code)
@@ -76,41 +92,116 @@ def build_cutting_repack(cutting_job):
 			"gf_source_item_role": "Cut WIP",
 		})
 
-	for source in cutting_job.get("source_sheets") or []:
-		if flt(source.get("remnant_qty")) > 0:
-			remnant_item = source.get("remnant_item") or ensure_remnant_item(source.item_code, source.remnant_length_mm, source.remnant_width_mm)
-			se.append("items", {
-				"item_code": remnant_item,
-				"gf_cutting_job": cutting_job.name,
-				"t_warehouse": settings.remnants_warehouse,
-				"qty": flt(source.remnant_qty),
-				"transfer_qty": flt(source.remnant_qty),
-				"uom": _stock_uom(remnant_item),
-				"stock_uom": _stock_uom(remnant_item),
-				"conversion_factor": 1,
-				"is_finished_item": 1,
-				"gf_source_item_role": "Remnant",
-			})
-		if flt(source.get("scrap_qty")) > 0:
-			scrap_item = get_scrap_item()
-			se.append("items", {
-				"item_code": scrap_item,
-				"gf_cutting_job": cutting_job.name,
-				"t_warehouse": settings.scrap_warehouse,
-				"qty": flt(source.scrap_qty),
-				"transfer_qty": flt(source.scrap_qty),
-				"uom": _stock_uom(scrap_item),
-				"stock_uom": _stock_uom(scrap_item),
-				"conversion_factor": 1,
-				"is_finished_item": 1,
-				"gf_source_item_role": "Scrap",
-			})
+	if use_optimization:
+		_append_optimization_outputs(se, cutting_job, settings)
+	else:
+		for source in cutting_job.get("source_sheets") or []:
+			if flt(source.get("remnant_qty")) > 0:
+				remnant_item = source.get("remnant_item") or ensure_remnant_item(source.item_code, source.remnant_length_mm, source.remnant_width_mm)
+				se.append("items", {
+					"item_code": remnant_item,
+					"gf_cutting_job": cutting_job.name,
+					"t_warehouse": settings.remnants_warehouse,
+					"qty": flt(source.remnant_qty),
+					"transfer_qty": flt(source.remnant_qty),
+					"uom": _stock_uom(remnant_item),
+					"stock_uom": _stock_uom(remnant_item),
+					"conversion_factor": 1,
+					"is_finished_item": 1,
+					"gf_source_item_role": "Remnant",
+				})
+			if flt(source.get("scrap_qty")) > 0:
+				scrap_item = get_scrap_item()
+				se.append("items", {
+					"item_code": scrap_item,
+					"gf_cutting_job": cutting_job.name,
+					"t_warehouse": settings.scrap_warehouse,
+					"qty": flt(source.scrap_qty),
+					"transfer_qty": flt(source.scrap_qty),
+					"uom": _stock_uom(scrap_item),
+					"stock_uom": _stock_uom(scrap_item),
+					"conversion_factor": 1,
+					"is_finished_item": 1,
+					"gf_source_item_role": "Scrap",
+				})
 
 	if not se.items:
 		frappe.throw("Cutting stock movement has no rows to post.")
 
 	_allocate_cutting_repack_rates(se, cutting_job)
 	return se
+
+
+def _sheet_id(idx: int) -> str:
+	"""Build the SHEET-00n identifier used by the GlassOptimizer export."""
+	return f"SHEET-{idx:03d}"
+
+
+def _optimization_active(cutting_job) -> bool:
+	"""True when an imported optimization result should drive Repack #1."""
+	return bool(
+		cutting_job.get("optimization_status") == "Imported"
+		and cutting_job.get("optimization_used_sheets")
+	)
+
+
+def _validate_optimization_sheets(cutting_job, used_qty_by_sheet_id: dict[str, float]) -> None:
+	source_count = len(cutting_job.get("source_sheets") or [])
+	expected_ids = {_sheet_id(i) for i in range(1, source_count + 1)}
+	unknown = set(used_qty_by_sheet_id) - expected_ids
+	if unknown:
+		frappe.throw(
+			f"Optimization result references sheet IDs {sorted(unknown)} that do not match the "
+			f"current {source_count} source sheet row(s). Re-export and re-import the optimization."
+		)
+
+
+def _append_optimization_outputs(se, cutting_job, settings) -> None:
+	"""Append remnant and scrap rows from the imported optimization result."""
+	sheet_item_by_id: dict[str, str] = {}
+	for idx, source in enumerate(cutting_job.get("source_sheets") or [], start=1):
+		sheet_item_by_id[_sheet_id(idx)] = source.item_code
+
+	for remnant in cutting_job.get("optimization_remnants") or []:
+		qty = flt(remnant.get("qty"))
+		if qty <= 0:
+			continue
+		base_item = sheet_item_by_id.get(remnant.get("source_sheet_id"))
+		if not base_item:
+			frappe.throw(
+				f"Optimization remnant references unknown sheet {remnant.get('source_sheet_id')!r}."
+			)
+		remnant_item = ensure_remnant_item(
+			base_item, flt(remnant.get("length_mm")), flt(remnant.get("width_mm"))
+		)
+		se.append("items", {
+			"item_code": remnant_item,
+			"gf_cutting_job": cutting_job.name,
+			"t_warehouse": settings.remnants_warehouse,
+			"qty": qty,
+			"transfer_qty": qty,
+			"uom": _stock_uom(remnant_item),
+			"stock_uom": _stock_uom(remnant_item),
+			"conversion_factor": 1,
+			"is_finished_item": 1,
+			"gf_source_item_role": "Remnant",
+		})
+
+	waste_area_m2 = flt(cutting_job.get("optimization_waste_area_m2"))
+	if waste_area_m2 > 0:
+		scrap_item = get_scrap_item()
+		se.append("items", {
+			"item_code": scrap_item,
+			"gf_cutting_job": cutting_job.name,
+			"t_warehouse": settings.scrap_warehouse,
+			"qty": waste_area_m2,
+			"transfer_qty": waste_area_m2,
+			"uom": _stock_uom(scrap_item),
+			"stock_uom": _stock_uom(scrap_item),
+			"conversion_factor": 1,
+			"is_finished_item": 1,
+			"gf_source_item_role": "Scrap",
+		})
 
 
 def build_processing_repack(processing_job):

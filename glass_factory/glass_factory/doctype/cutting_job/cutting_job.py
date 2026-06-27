@@ -18,6 +18,11 @@ class CuttingJob(Document):
 		self._validate_assignment_limits()
 		self._validate_source_sheets()
 
+	def _save_after_submit(self):
+		if self.docstatus == 1:
+			self.flags.ignore_validate_update_after_submit = True
+		self.save(ignore_permissions=True)
+
 	@frappe.whitelist()
 	def pull_from_sales_orders(self):
 		"""Populate pieces and source sheets from linked submitted Sales Orders."""
@@ -96,8 +101,11 @@ class CuttingJob(Document):
 		se.insert(ignore_permissions=True)
 		self.linked_stock_entry = se.name
 		self.status = "Ready for Cutting"
-		self.save(ignore_permissions=True)
-		return {"message": "Draft cutting stock movement created.", "stock_entry": se.name}
+		self._save_after_submit()
+		message = "Draft cutting stock movement created."
+		if self.get("optimization_status") == "Imported" and self.get("optimization_used_sheets"):
+			message = "Draft cutting stock movement created from imported optimization result."
+		return {"message": message, "stock_entry": se.name}
 
 	@frappe.whitelist()
 	def submit_repack_stock_entry(self):
@@ -112,7 +120,7 @@ class CuttingJob(Document):
 				"gf_cutting_job": self.name,
 				"gf_cut_qty": flt(piece.get("qty_cut") or piece.get("qty_required")),
 			})
-		self.save(ignore_permissions=True)
+		self._save_after_submit()
 		return {"message": "Cutting stock movement submitted.", "stock_entry": se.name}
 
 	@frappe.whitelist()
@@ -178,7 +186,7 @@ class CuttingJob(Document):
 		if self.status not in ("Cut Stock Posted", "Processing Started"):
 			frappe.throw("Submit the cutting stock movement before completing the Cutting Job.")
 		self.status = "Completed"
-		self.save(ignore_permissions=True)
+		self._save_after_submit()
 		return {"message": "Cutting Job completed."}
 
 	def _validate_sales_orders(self):

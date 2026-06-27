@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "creation": "2026-06-27 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "piece_id",
+  "item_code",
+  "length_mm",
+  "width_mm",
+  "qty",
+  "source_sheet_id"
+ ],
+ "fields": [
+  {"fieldname": "piece_id", "fieldtype": "Data", "in_list_view": 1, "label": "Piece ID", "reqd": 1},
+  {"fieldname": "item_code", "fieldtype": "Data", "in_list_view": 1, "label": "Item Code", "reqd": 1},
+  {"fieldname": "length_mm", "fieldtype": "Float", "in_list_view": 1, "label": "Length (mm)", "reqd": 1},
+  {"fieldname": "width_mm", "fieldtype": "Float", "in_list_view": 1, "label": "Width (mm)", "reqd": 1},
+  {"fieldname": "qty", "fieldtype": "Float", "in_list_view": 1, "label": "Qty", "reqd": 1},
+  {"fieldname": "source_sheet_id", "fieldtype": "Data", "in_list_view": 1, "label": "Source Sheet ID", "reqd": 1}
+ ],
+ "istable": 1,
+ "modified": "2026-06-27 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Cutting Job Optimization Placed Piece",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_order": 50,
+ "track_changes": 1
+}

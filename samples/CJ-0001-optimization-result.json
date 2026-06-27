@@ -1,0 +1,30 @@
+{
+  "cutting_job": "CJ-0001",
+  "status": "completed",
+  "message": "Optimization completed",
+  "used_sheets": [
+    {
+      "sheet_id": "SHEET-001",
+      "used_qty": 2
+    }
+  ],
+  "placed_pieces": [
+    {
+      "piece_id": "P1",
+      "item_code": "GLS-CLEAR-8MM-1200X800-POL",
+      "length_mm": 1200,
+      "width_mm": 800,
+      "qty": 5,
+      "source_sheet_id": "SHEET-001"
+    }
+  ],
+  "remnants": [
+    {
+      "source_sheet_id": "SHEET-001",
+      "length_mm": 500,
+      "width_mm": 300,
+      "qty": 1
+    }
+  ],
+  "waste_area_m2": 1.25
+}
