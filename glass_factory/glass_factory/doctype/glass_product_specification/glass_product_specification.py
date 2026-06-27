@@ -14,6 +14,13 @@ from glass_factory.glass_factory.item_resolver import (
 	spec_is_used_in_transaction,
 	validate_glass_type,
 )
+from glass_factory.glass_factory.spec_pricing import (
+	calculate_raw_cost,
+	calculate_spec_pricing,
+	fetch_raw_sheet_rate,
+	get_spec_currency,
+	pricing_result,
+)
 
 OPERATION_LABELS = {
 	"polish": "Polish",
@@ -52,7 +59,35 @@ class GlassProductSpecification(Document):
 		self.validate_primary_design_attachment()
 		self.update_item_code_preview()
 		self.build_technical_summary()
+		self.calculate_pricing()
 		self._check_regeneration_required()
+
+	def calculate_pricing(self):
+		calculate_spec_pricing(self)
+
+	def calculate_raw_cost(self):
+		calculate_raw_cost(self)
+
+	def calculate_processing_quantities(self):
+		from glass_factory.glass_factory.spec_pricing import calculate_processing_quantities
+
+		calculate_processing_quantities(self)
+
+	def calculate_processing_amounts(self):
+		from glass_factory.glass_factory.spec_pricing import calculate_processing_amounts
+
+		calculate_processing_amounts(self)
+
+	def calculate_final_pricing(self):
+		from glass_factory.glass_factory.spec_pricing import calculate_final_pricing
+
+		calculate_final_pricing(self)
+
+	def fetch_raw_sheet_rate(self, *, fetch_from_item_price: bool = False):
+		rate = fetch_raw_sheet_rate(self, fetch_from_item_price=fetch_from_item_price)
+		if rate > 0:
+			self.raw_sheet_rate_per_piece = rate
+		return rate
 
 	def calculate_area(self):
 		length = flt(self.length_mm)
@@ -182,7 +217,8 @@ class GlassProductSpecification(Document):
 		self.pull_raw_sheet_dimensions()
 		self.update_item_code_preview()
 		self.build_technical_summary()
-		return {
+		self.calculate_pricing()
+		result = {
 			"area_m2": self.area_m2,
 			"total_area_m2": self.total_area_m2,
 			"raw_sheet_length_mm": self.raw_sheet_length_mm,
@@ -192,6 +228,27 @@ class GlassProductSpecification(Document):
 			"operation_code_preview": self.operation_code_preview,
 			"technical_summary": self.technical_summary,
 		}
+		result.update(pricing_result(self))
+		return result
+
+	@frappe.whitelist()
+	def refresh_pricing(self):
+		self._validate_glass_dimensions()
+		self.calculate_area()
+		self.pull_raw_sheet_dimensions()
+
+		had_raw_rate = flt(self.raw_sheet_rate_per_piece) > 0
+		if not had_raw_rate:
+			self.fetch_raw_sheet_rate(fetch_from_item_price=True)
+
+		self.calculate_pricing()
+		self.save()
+
+		result = pricing_result(self)
+		result["currency"] = get_spec_currency(self)
+		if flt(result.get("raw_sheet_rate_per_piece")) <= 0:
+			result["warning"] = "No raw sheet rate found. Pricing was calculated with raw cost = 0."
+		return result
 
 	@frappe.whitelist()
 	def generate_items(self):

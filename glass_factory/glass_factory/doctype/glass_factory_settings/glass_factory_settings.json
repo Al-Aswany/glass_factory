@@ -43,7 +43,9 @@
   "slots_cost_per_m2",
   "temper_cost_per_m2",
   "sandblast_cost_per_m2",
-  "laminate_cost_per_m2"
+  "laminate_cost_per_m2",
+  "operation_rates_section",
+  "operation_rates"
  ],
  "fields": [
   {
@@ -279,6 +281,18 @@
    "fieldname": "laminate_cost_per_m2",
    "fieldtype": "Currency",
    "label": "Laminated Cost (per m\u00b2)"
+  },
+  {
+   "description": "Flexible operation rates used by Glass Product Specification pricing. Legacy fields above remain for Quotation Glass Piece pricing.",
+   "fieldname": "operation_rates_section",
+   "fieldtype": "Section Break",
+   "label": "Operation Rates (Flexible)"
+  },
+  {
+   "fieldname": "operation_rates",
+   "fieldtype": "Table",
+   "label": "Operation Rates",
+   "options": "Glass Operation Rate"
   }
  ],
  "issingle": 1,

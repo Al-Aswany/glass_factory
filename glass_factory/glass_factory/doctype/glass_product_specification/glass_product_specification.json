@@ -52,6 +52,28 @@
   "special_hole_count",
   "slot_count",
   "special_slot_count",
+  "section_pricing",
+  "raw_sheet_rate_per_piece",
+  "raw_cost_per_m2",
+  "raw_cost_per_finished_piece",
+  "column_break_pricing_qty",
+  "edge_meter",
+  "chargeable_area_m2",
+  "total_chargeable_area_m2",
+  "column_break_pricing_processing",
+  "area_processing_amount_per_piece",
+  "edge_processing_amount_per_piece",
+  "unit_processing_amount_per_piece",
+  "processing_amount_per_piece",
+  "column_break_pricing_final",
+  "calculated_amount_per_piece",
+  "calculated_rate_per_m2",
+  "manual_selling_rate_per_m2",
+  "selling_rate_per_m2",
+  "price_override",
+  "price_difference_per_m2",
+  "rate_per_piece",
+  "amount",
   "section_design_attachments",
   "design_attachments",
   "section_item_code_preview",
@@ -352,6 +374,147 @@
    "fieldname": "special_slot_count",
    "fieldtype": "Int",
    "label": "Special Slot Count"
+  },
+  {
+   "fieldname": "section_pricing",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "fieldname": "raw_sheet_rate_per_piece",
+   "fieldtype": "Currency",
+   "label": "Raw Sheet Rate (per piece)",
+   "options": "currency"
+  },
+  {
+   "fieldname": "raw_cost_per_m2",
+   "fieldtype": "Currency",
+   "label": "Raw Cost (per m\u00b2)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_cost_per_finished_piece",
+   "fieldtype": "Currency",
+   "label": "Raw Cost (per finished piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_pricing_qty",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "edge_meter",
+   "fieldtype": "Float",
+   "label": "Edge Meter",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "chargeable_area_m2",
+   "fieldtype": "Float",
+   "label": "Chargeable Area (m\u00b2)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_chargeable_area_m2",
+   "fieldtype": "Float",
+   "label": "Total Chargeable Area (m\u00b2)",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_pricing_processing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "area_processing_amount_per_piece",
+   "fieldtype": "Currency",
+   "label": "Area Processing Amount (per piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "edge_processing_amount_per_piece",
+   "fieldtype": "Currency",
+   "label": "Edge Processing Amount (per piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "unit_processing_amount_per_piece",
+   "fieldtype": "Currency",
+   "label": "Unit Processing Amount (per piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processing_amount_per_piece",
+   "fieldtype": "Currency",
+   "label": "Processing Amount (per piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_pricing_final",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "calculated_amount_per_piece",
+   "fieldtype": "Currency",
+   "label": "Calculated Amount (per piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calculated_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Calculated Rate (per m\u00b2)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "manual_selling_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Manual Selling Rate (per m\u00b2)",
+   "options": "currency"
+  },
+  {
+   "fieldname": "selling_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Selling Rate (per m\u00b2)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "price_override",
+   "fieldtype": "Check",
+   "label": "Price Override",
+   "read_only": 1
+  },
+  {
+   "fieldname": "price_difference_per_m2",
+   "fieldtype": "Currency",
+   "label": "Price Difference (per m\u00b2)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate_per_piece",
+   "fieldtype": "Currency",
+   "label": "Rate (per piece)",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "currency",
+   "read_only": 1
   },
   {
    "fieldname": "section_design_attachments",
