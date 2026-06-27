@@ -1,7 +1,34 @@
 frappe.ui.form.on("Cutting Job", {
 	refresh(frm) {
 		frm.trigger("set_status_indicator");
+		frm.trigger("set_source_sheet_queries");
 		frm.trigger("add_custom_buttons");
+	},
+
+	set_source_sheet_queries(frm) {
+		frm.set_query("item_code", "source_sheets", () => ({
+			filters: {
+				gf_glass_item_role: ["in", ["Raw Sheet", "Remnant"]],
+				has_batch_no: 1,
+				disabled: 0,
+			},
+		}));
+
+		frm.set_query("batch_no", "source_sheets", (doc, cdt, cdn) => {
+			const row = locals[cdt][cdn];
+			if (!row.item_code || !row.warehouse) {
+				return { filters: { name: ["in", []] } };
+			}
+			return {
+				query: "glass_factory.glass_factory.batch_utils.get_source_sheet_batch_no",
+				filters: {
+					item_code: row.item_code,
+					warehouse: row.warehouse,
+					source_role: row.source_role,
+					posting_date: frappe.datetime.get_today(),
+				},
+			};
+		});
 	},
 
 	set_status_indicator(frm) {
@@ -142,7 +169,10 @@ frappe.ui.form.on("Cutting Job Sales Order", {
 frappe.ui.form.on("Cutting Job Source Sheet", {
 	item_code(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
-		if (!row.item_code) return;
+		if (!row.item_code) {
+			frappe.model.set_value(cdt, cdn, "batch_no", "");
+			return;
+		}
 		frappe.call({
 			method: "glass_factory.glass_factory.item_resolver.get_item_glass_meta",
 			args: { item_code: row.item_code },
@@ -151,6 +181,15 @@ frappe.ui.form.on("Cutting Job Source Sheet", {
 			frappe.model.set_value(cdt, cdn, "source_role", message.gf_glass_item_role || "Raw Sheet");
 			frappe.model.set_value(cdt, cdn, "length_mm", message.gf_length_mm || 0);
 			frappe.model.set_value(cdt, cdn, "width_mm", message.gf_width_mm || 0);
+			frappe.model.set_value(cdt, cdn, "batch_no", "");
 		});
+	},
+
+	warehouse(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "batch_no", "");
+	},
+
+	source_role(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, "batch_no", "");
 	},
 });

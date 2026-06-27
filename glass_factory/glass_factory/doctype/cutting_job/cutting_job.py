@@ -185,6 +185,12 @@ class CuttingJob(Document):
 	def complete_job(self):
 		if self.status not in ("Cut Stock Posted", "Processing Started"):
 			frappe.throw("Submit the cutting stock movement before completing the Cutting Job.")
+		if self._processing_required():
+			if not self.linked_processing_job:
+				frappe.throw("Complete the Glass Processing Job before completing the Cutting Job.")
+			processing_status = frappe.db.get_value("Glass Processing Job", self.linked_processing_job, "status")
+			if processing_status != "Completed":
+				frappe.throw("Complete the Glass Processing Job before completing the Cutting Job.")
 		self.status = "Completed"
 		self._save_after_submit()
 		return {"message": "Cutting Job completed."}
@@ -243,6 +249,24 @@ class CuttingJob(Document):
 			role = row.get("source_role") or item_role(row.item_code)
 			if role not in ("Raw Sheet", "Remnant"):
 				frappe.throw(f"Source sheet row {row.idx}: source Item must be Raw Sheet or Remnant.")
+			if not row.get("batch_no"):
+				frappe.throw(f"Source sheet row {row.idx}: Batch is required.")
+
+			from glass_factory.glass_factory.batch_utils import validate_source_sheet_batch
+
+			validate_source_sheet_batch(
+				row.batch_no,
+				row.item_code,
+				row.warehouse,
+				row.get("source_role"),
+			)
+
+	def _processing_required(self) -> bool:
+		return any(
+			flag
+			for piece in self.get("pieces") or []
+			for flag in (piece.get("processing_flags") or "").split("-")
+		)
 
 	def _assigned_qty(self, so_item_name):
 		filters = {

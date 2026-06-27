@@ -27,9 +27,9 @@ class GlassProcessingJob(Document):
 	def create_repack_stock_entry(self):
 		if self.docstatus != 1:
 			frappe.throw("Submit the Processing Job before creating a final stock movement.")
+		self._validate_operations_completed()
 		if self.linked_stock_entry:
 			return {"stock_entry": self.linked_stock_entry}
-		self._mark_operations_completed_if_empty()
 		se = build_processing_repack(self)
 		se.insert(ignore_permissions=True)
 		self.linked_stock_entry = se.name
@@ -39,6 +39,7 @@ class GlassProcessingJob(Document):
 
 	@frappe.whitelist()
 	def submit_repack_stock_entry(self):
+		self._validate_operations_completed()
 		if not self.linked_stock_entry:
 			self.create_repack_stock_entry()
 		se = frappe.get_doc("Stock Entry", self.linked_stock_entry)
@@ -121,10 +122,10 @@ class GlassProcessingJob(Document):
 			if output_qty > input_by_so_item.get(so_item, 0):
 				frappe.throw(f"Output quantity for Sales Order Item {so_item} exceeds Cut WIP input quantity.")
 
-	def _mark_operations_completed_if_empty(self):
+	def _validate_operations_completed(self):
 		for row in self.operations:
-			if not row.status:
-				row.status = "Completed"
+			if row.status != "Completed":
+				frappe.throw("Complete all processing operations before creating the final stock movement.")
 
 	def _update_so_item(self, row_name, values):
 		for fieldname, value in values.items():

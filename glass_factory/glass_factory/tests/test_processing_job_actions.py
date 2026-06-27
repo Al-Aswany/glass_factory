@@ -47,3 +47,19 @@ class TestProcessingJobActions(unittest.TestCase):
 
 		doc.status = "Final Stock Posted"
 		self.assertEqual(get_valid_actions_for_doc(doc), [{"action": "complete_job", "label": "Complete Job"}])
+
+	def test_direct_final_stock_creation_blocks_pending_operations(self):
+		doc = frappe.get_doc({"doctype": "Glass Processing Job", "status": "Ready for Processing"})
+		doc.docstatus = 1
+		doc.append("operations", {"operation": "POL", "status": "Pending"})
+
+		with self.assertRaises(frappe.ValidationError):
+			doc.create_repack_stock_entry()
+
+	def test_cutting_job_completion_blocks_required_processing(self):
+		doc = frappe.get_doc({"doctype": "Cutting Job", "status": "Cut Stock Posted"})
+		doc.docstatus = 1
+		doc.append("pieces", {"processing_flags": "POL"})
+
+		with self.assertRaises(frappe.ValidationError):
+			doc.complete_job()

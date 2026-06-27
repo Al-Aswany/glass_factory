@@ -10,6 +10,7 @@ from glass_factory.glass_factory.stock_posting import (
 	_optimization_active,
 	_validate_optimization_sheets,
 	build_cutting_repack,
+	build_processing_repack,
 )
 
 
@@ -77,7 +78,7 @@ class TestStockPosting(IntegrationTestCase):
 		cutting_job = frappe._dict(
 			name="CJ-TRACE-001",
 			source_sheets=[
-				frappe._dict(idx=1, item_code="RAW-GLASS", warehouse="Stores - _TC", qty_consumed=1, source_role="Raw Sheet"),
+				frappe._dict(idx=1, item_code="RAW-GLASS", warehouse="Stores - _TC", qty_consumed=1, source_role="Raw Sheet", batch_no="RAW-BATCH"),
 			],
 			pieces=[
 				frappe._dict(
@@ -96,11 +97,36 @@ class TestStockPosting(IntegrationTestCase):
 			patch("glass_factory.glass_factory.stock_posting._company_from_job", return_value="_Test Company"), \
 			patch("glass_factory.glass_factory.stock_posting.item_role", side_effect=lambda item: "Raw Sheet" if item == "RAW-GLASS" else "Cut WIP"), \
 			patch("glass_factory.glass_factory.stock_posting._stock_uom", return_value="Nos"), \
+			patch("glass_factory.glass_factory.stock_posting.ensure_output_batch", return_value="CUT-BATCH"), \
+			patch("glass_factory.glass_factory.stock_posting.batch_row_fields", side_effect=lambda item, batch: {"batch_no": batch, "use_serial_batch_fields": 1} if batch else {}), \
 			patch("glass_factory.glass_factory.stock_posting._allocate_cutting_repack_rates"):
 			se = build_cutting_repack(cutting_job)
 
 		self.assertTrue(se.items)
 		self.assertTrue(all(row.gf_cutting_job == cutting_job.name for row in se.items))
+		self.assertEqual(se.items[0].batch_no, "RAW-BATCH")
+		self.assertEqual(se.items[1].batch_no, "CUT-BATCH")
+
+	def test_cutting_repack_requires_source_sheet_batch(self):
+		cutting_job = frappe._dict(
+			name="CJ-NO-BATCH",
+			source_sheets=[frappe._dict(idx=1, item_code="RAW-GLASS")],
+			pieces=[frappe._dict(idx=1, cut_wip_item="CUT-GLASS", qty_required=1)],
+		)
+
+		with self.assertRaises(frappe.ValidationError):
+			build_cutting_repack(cutting_job)
+
+	def test_processing_repack_requires_completed_operations(self):
+		processing_job = frappe._dict(
+			name="GPJ-TRACE-001",
+			inputs=[frappe._dict(idx=1, cut_wip_item="CUT-GLASS", qty=1)],
+			outputs=[frappe._dict(idx=1, final_item="FINAL-GLASS", qty=1)],
+			operations=[frappe._dict(idx=1, operation="POL", status="Pending")],
+		)
+
+		with self.assertRaises(frappe.ValidationError):
+			build_processing_repack(processing_job)
 
 
 def _optimized_job(**overrides):
@@ -115,6 +141,7 @@ def _optimized_job(**overrides):
 				"item_code": "GLS-CLEAR-8MM-3210X2250",
 				"warehouse": "Glass Raw Stock - _TC",
 				"source_role": "Raw Sheet",
+				"batch_no": "RAW-BATCH",
 				"qty_consumed": 2,
 			}),
 		],
@@ -159,6 +186,8 @@ def _patched_build(job):
 		patch(base + "_company_from_job", return_value="_Test Company"), \
 		patch(base + "_stock_uom", return_value="Nos"), \
 		patch(base + "item_role", side_effect=fake_role), \
+		patch(base + "ensure_output_batch", side_effect=lambda item, job_name, role, *args, **kwargs: f"{item}-{role}-BATCH"), \
+		patch(base + "batch_row_fields", side_effect=lambda item, batch: {"batch_no": batch, "use_serial_batch_fields": 1} if batch else {}), \
 		patch(base + "ensure_remnant_item", side_effect=lambda item, length, width: f"{item}-{int(length)}X{int(width)}-REM"), \
 		patch(base + "get_scrap_item", return_value="Glass Scrap"), \
 		patch(base + "_allocate_cutting_repack_rates"):

@@ -7,7 +7,7 @@ from frappe.utils import flt, nowdate, nowtime
 
 from erpnext.stock.utils import get_incoming_rate
 
-from glass_factory.glass_factory.batch_utils import batch_row_fields, ensure_remnant_batch
+from glass_factory.glass_factory.batch_utils import batch_row_fields, ensure_output_batch, ensure_remnant_batch
 from glass_factory.glass_factory.item_resolver import (
 	_parse_raw_item_code,
 	ensure_remnant_item,
@@ -78,7 +78,16 @@ def build_cutting_repack(cutting_job):
 			frappe.throw(f"Piece row {piece.idx}: Cut WIP Item is required.")
 		if item_role(piece.cut_wip_item) != "Cut WIP":
 			frappe.throw(f"Piece row {piece.idx}: Output item must be Cut WIP.")
-		se.append("items", {
+		batch_no = ensure_output_batch(
+			piece.cut_wip_item,
+			cutting_job.name,
+			"Cut WIP",
+			piece.get("length_mm"),
+			piece.get("width_mm"),
+			row_key=_cut_wip_batch_key(piece),
+			cutting_job=cutting_job.name,
+		)
+		row_data = {
 			"item_code": piece.cut_wip_item,
 			"gf_cutting_job": cutting_job.name,
 			"t_warehouse": piece.get("target_warehouse") or settings.cut_wip_warehouse,
@@ -92,7 +101,9 @@ def build_cutting_repack(cutting_job):
 			"gf_sales_order_item": piece.sales_order_item,
 			"gf_glass_specification": piece.get("glass_specification"),
 			"gf_source_item_role": "Cut WIP",
-		})
+		}
+		row_data.update(batch_row_fields(piece.cut_wip_item, batch_no))
+		se.append("items", row_data)
 
 	if use_optimization:
 		_append_optimization_outputs(se, cutting_job, settings)
@@ -259,7 +270,16 @@ def build_processing_repack(processing_job):
 			continue
 		if item_role(row.cut_wip_item) != "Cut WIP":
 			frappe.throw(f"Input row {row.idx}: source must be Cut WIP.")
-		se.append("items", {
+		batch_no = ensure_output_batch(
+			row.cut_wip_item,
+			_cutting_job_batch_namespace(processing_job),
+			"Cut WIP",
+			row.get("length_mm"),
+			row.get("width_mm"),
+			row_key=_cut_wip_batch_key(row),
+			cutting_job=processing_job.get("cutting_job"),
+		)
+		row_data = {
 			"item_code": row.cut_wip_item,
 			"gf_cutting_job": processing_job.get("cutting_job"),
 			"s_warehouse": row.get("warehouse") or settings.cut_wip_warehouse,
@@ -272,7 +292,9 @@ def build_processing_repack(processing_job):
 			"gf_sales_order_item": row.sales_order_item,
 			"gf_glass_specification": row.get("glass_specification"),
 			"gf_source_item_role": "Cut WIP",
-		})
+		}
+		row_data.update(batch_row_fields(row.cut_wip_item, batch_no))
+		se.append("items", row_data)
 
 	for row in processing_job.get("outputs") or []:
 		qty = flt(row.get("qty") or 0)
@@ -283,6 +305,15 @@ def build_processing_repack(processing_job):
 		_so_item = frappe.db.get_value("Sales Order Item", row.sales_order_item, ["item_code", "gf_final_item"], as_dict=True)
 		if _so_item and row.final_item != (_so_item.gf_final_item or _so_item.item_code):
 			frappe.throw(f"Output row {row.idx}: final Item must match the Sales Order Item.")
+		batch_no = ensure_output_batch(
+			row.final_item,
+			_final_batch_namespace(processing_job),
+			"Final",
+			row.get("length_mm"),
+			row.get("width_mm"),
+			row_key=_final_batch_key(row),
+			cutting_job=processing_job.get("cutting_job"),
+		)
 		row_data = {
 			"item_code": row.final_item,
 			"gf_cutting_job": processing_job.get("cutting_job"),
@@ -298,6 +329,7 @@ def build_processing_repack(processing_job):
 			"gf_glass_specification": row.get("glass_specification"),
 			"gf_source_item_role": "Final",
 		}
+		row_data.update(batch_row_fields(row.final_item, batch_no))
 		override_rate = flt(row.get("basic_rate"))
 		if override_rate > 0:
 			row_data["set_basic_rate_manually"] = 1
@@ -314,6 +346,9 @@ def _validate_cutting_job(cutting_job):
 		frappe.throw("Add at least one source sheet before creating the cutting stock movement.")
 	if not cutting_job.get("pieces"):
 		frappe.throw("Add at least one cutting piece before creating the cutting stock movement.")
+	for source in cutting_job.get("source_sheets") or []:
+		if source.get("item_code") and not source.get("batch_no"):
+			frappe.throw(f"Source sheet row {source.idx}: Batch is required.")
 
 
 def _validate_processing_job(processing_job):
@@ -321,6 +356,25 @@ def _validate_processing_job(processing_job):
 		frappe.throw("Add at least one Cut WIP input before creating the final stock movement.")
 	if not processing_job.get("outputs"):
 		frappe.throw("Add at least one Final output before creating the final stock movement.")
+	for operation in processing_job.get("operations") or []:
+		if operation.get("status") != "Completed":
+			frappe.throw("Complete all processing operations before creating the final stock movement.")
+
+
+def _cut_wip_batch_key(row) -> str:
+	return row.get("sales_order_item") or row.get("name") or f"ROW{row.get('idx') or 0}"
+
+
+def _final_batch_key(row) -> str:
+	return row.get("sales_order_item") or row.get("name") or f"ROW{row.get('idx') or 0}"
+
+
+def _cutting_job_batch_namespace(processing_job) -> str:
+	return processing_job.get("cutting_job") or processing_job.get("name") or "CUT-WIP"
+
+
+def _final_batch_namespace(processing_job) -> str:
+	return processing_job.get("name") or processing_job.get("cutting_job") or "FINAL"
 
 
 def _settings():
