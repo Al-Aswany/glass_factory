@@ -10,8 +10,70 @@
   "is_hidden": 0,
   "public": 1,
   "sequence_id": 1.0,
-  "content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Glass Factory</b></span>\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Cutting\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Inventory\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
+  "content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Glass Factory</b></span>\",\"col\":12}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Sales\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Production\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Inventory\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
   "links": [
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Sales",
+    "link_count": 4,
+    "onboard": 0,
+    "type": "Card Break"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Glass Product Specification",
+    "link_count": 0,
+    "link_to": "Glass Product Specification",
+    "link_type": "DocType",
+    "onboard": 1,
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Quotation",
+    "link_count": 0,
+    "link_to": "Quotation",
+    "link_type": "DocType",
+    "onboard": 1,
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Sales Order",
+    "link_count": 0,
+    "link_to": "Sales Order",
+    "link_type": "DocType",
+    "onboard": 1,
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Delivery Note",
+    "link_count": 0,
+    "link_to": "Delivery Note",
+    "link_type": "DocType",
+    "onboard": 0,
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Production",
+    "link_count": 2,
+    "onboard": 0,
+    "type": "Card Break"
+   },
    {
     "doctype": "Workspace Link",
     "hidden": 0,
@@ -21,8 +83,7 @@
     "link_to": "Cutting Job",
     "link_type": "DocType",
     "onboard": 1,
-    "type": "Link",
-    "card_name": "Cutting"
+    "type": "Link"
    },
    {
     "doctype": "Workspace Link",
@@ -33,8 +94,47 @@
     "link_to": "Glass Processing Job",
     "link_type": "DocType",
     "onboard": 1,
-    "type": "Link",
-    "card_name": "Cutting"
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Inventory",
+    "link_count": 2,
+    "onboard": 0,
+    "type": "Card Break"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Stock Entry",
+    "link_count": 0,
+    "link_to": "Stock Entry",
+    "link_type": "DocType",
+    "onboard": 0,
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Batch",
+    "link_count": 0,
+    "link_to": "Batch",
+    "link_type": "DocType",
+    "onboard": 0,
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Reports",
+    "link_count": 2,
+    "onboard": 0,
+    "type": "Card Break"
    },
    {
     "doctype": "Workspace Link",
@@ -45,8 +145,7 @@
     "link_to": "Layout Visualizer",
     "link_type": "Report",
     "onboard": 0,
-    "type": "Link",
-    "card_name": "Reports"
+    "type": "Link"
    },
    {
     "doctype": "Workspace Link",
@@ -57,8 +156,16 @@
     "link_to": "Remnant Inventory",
     "link_type": "Report",
     "onboard": 0,
-    "type": "Link",
-    "card_name": "Reports"
+    "type": "Link"
+   },
+   {
+    "doctype": "Workspace Link",
+    "hidden": 0,
+    "is_query_report": 0,
+    "label": "Settings",
+    "link_count": 1,
+    "onboard": 0,
+    "type": "Card Break"
    },
    {
     "doctype": "Workspace Link",
@@ -69,8 +176,7 @@
     "link_to": "Glass Factory Settings",
     "link_type": "DocType",
     "onboard": 1,
-    "type": "Link",
-    "card_name": "Settings"
+    "type": "Link"
    }
   ]
  }
