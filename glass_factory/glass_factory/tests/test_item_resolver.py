@@ -11,6 +11,7 @@ from glass_factory.glass_factory.item_resolver import (
 	ensure_final_item,
 	infer_glass_role_from_item_code,
 	parse_processing_flags,
+	preview_raw_item_code,
 	processing_flags_from_item_code,
 	spec_from_item_code,
 	validate_glass_type,
@@ -27,6 +28,23 @@ class TestGlassItemResolver(unittest.TestCase):
 
 	def test_unknown_flags_are_ignored(self):
 		self.assertEqual(parse_processing_flags("POL,UNKNOWN,TMP"), ("POL", "TMP"))
+
+	def test_preview_raw_item_code(self):
+		with patch("glass_factory.glass_factory.item_resolver._settings_value") as mock_settings:
+			mock_settings.side_effect = lambda field: {
+				"allowed_glass_types": "CLEAR\nBRONZE",
+				"raw_item_group": "Glass Raw",
+			}.get(field)
+			result = preview_raw_item_code("CLEAR", 8, 3210, 2250)
+		self.assertTrue(result["valid"])
+		self.assertEqual(result["item_code"], "GLS-CLEAR-8MM-3210X2250")
+		self.assertEqual(result["glass_item_role"], "Raw Sheet")
+		self.assertEqual(result["item_group"], "Glass Raw")
+
+	def test_preview_raw_item_code_rejects_invalid_dimensions(self):
+		result = preview_raw_item_code("CLEAR", 0, 3210, 2250)
+		self.assertFalse(result["valid"])
+		self.assertEqual(result["item_code"], "")
 
 	def test_deterministic_item_codes(self):
 		spec = GlassSpec("CLEAR", 8, 1200, 800, ("POL", "HOL", "TMP"))

@@ -640,6 +640,34 @@ def _validate_role(item, allowed: tuple[str, ...]) -> None:
 
 
 @frappe.whitelist()
+def preview_raw_item_code(
+	glass_type: str,
+	thickness_mm=None,
+	length_mm=None,
+	width_mm=None,
+) -> dict:
+	"""Build a deterministic raw sheet Item code preview for the Item form helper."""
+	thickness = flt(thickness_mm)
+	length = flt(length_mm)
+	width = flt(width_mm)
+	if thickness <= 0 or length <= 0 or width <= 0:
+		return {"item_code": "", "valid": False}
+
+	validate_glass_type(glass_type, context="Raw sheet Item")
+	spec = GlassSpec(_code_part(glass_type), thickness, length, width, ())
+	return {
+		"item_code": _raw_item_code(spec),
+		"valid": True,
+		"glass_item_role": "Raw Sheet",
+		"item_group": _settings_value("raw_item_group") or _settings_value("default_item_group") or "",
+		"gf_base_glass_type": spec.base_glass_type,
+		"gf_thickness_mm": spec.thickness_mm,
+		"gf_length_mm": spec.length_mm,
+		"gf_width_mm": spec.width_mm,
+	}
+
+
+@frappe.whitelist()
 def get_allowed_glass_types() -> list[str]:
 	"""Return setup-controlled glass type codes in display order."""
 	raw_value = _settings_value("allowed_glass_types")
