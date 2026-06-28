@@ -13,22 +13,29 @@
   "scrap_warehouse",
   "items_section",
   "default_uom",
-  "default_item_group",
-  "allowed_glass_types",
-  "column_break_inqm",
   "raw_item_group",
   "cut_wip_item_group",
   "final_item_group",
+  "column_break_inqm",
   "remnant_item_group",
   "scrap_item_group",
   "scrap_item",
+  "glass_types_section",
+  "allowed_glass_types",
   "rules_section",
   "min_remnant_area_m2",
   "min_remnant_side_mm",
   "min_chargeable_area_m2",
   "kerf_mm",
+  "price_lists_section",
+  "default_buying_price_list",
+  "default_selling_price_list",
+  "operation_rates_section",
+  "operation_rates",
+  "cop_section",
   "enable_cop",
-  "pricing_section",
+  "advanced_section",
+  "default_item_group",
   "polish_rate_per_m2",
   "bevel_rate_per_m2",
   "holes_rate_per_m2",
@@ -43,21 +50,19 @@
   "slots_cost_per_m2",
   "temper_cost_per_m2",
   "sandblast_cost_per_m2",
-  "laminate_cost_per_m2",
-  "operation_rates_section",
-  "operation_rates"
+  "laminate_cost_per_m2"
  ],
  "fields": [
   {
-   "description": "Required for cutting and processing stock movements: Raw, Cut WIP, Final Goods, Remnants, and Scrap warehouses (created automatically on install/migrate).",
+   "description": "Warehouses used by Cutting Job, Repack #1, Processing Job, Repack #2, and all glass stock movements.",
    "fieldname": "warehouses_section",
    "fieldtype": "Section Break",
-   "label": "Warehouses"
+   "label": "Inventory Warehouses"
   },
   {
    "fieldname": "raw_warehouse",
    "fieldtype": "Link",
-   "label": "Raw Warehouse",
+   "label": "Raw Glass Warehouse",
    "options": "Warehouse"
   },
   {
@@ -73,6 +78,10 @@
    "options": "Warehouse"
   },
   {
+   "fieldname": "column_break_fkfg",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "remnants_warehouse",
    "fieldtype": "Link",
    "label": "Remnants Warehouse",
@@ -85,35 +94,22 @@
    "options": "Warehouse"
   },
   {
+   "description": "Default item groups for auto-created glass items. Raw Sheet items are purchase-only; Final items are sales-only.",
    "fieldname": "items_section",
    "fieldtype": "Section Break",
-   "label": "Items"
+   "label": "Item Defaults"
   },
   {
    "default": "Nos",
    "fieldname": "default_uom",
    "fieldtype": "Link",
-   "label": "Default UOM",
+   "label": "Default Stock UOM",
    "options": "UOM"
-  },
-  {
-   "default": "All Item Groups",
-   "fieldname": "default_item_group",
-   "fieldtype": "Link",
-   "label": "Default Item Group",
-   "options": "Item Group"
-  },
-  {
-   "default": "CLEAR\nBRONZE\nTINTED",
-   "description": "One glass type code per line (for example CLEAR, BRONZE, TINTED). These are the only type codes allowed in GLS-* Item codes.",
-   "fieldname": "allowed_glass_types",
-   "fieldtype": "Small Text",
-   "label": "Allowed Glass Types"
   },
   {
    "fieldname": "raw_item_group",
    "fieldtype": "Link",
-   "label": "Raw Item Group",
+   "label": "Raw Sheet Item Group",
    "options": "Item Group"
   },
   {
@@ -127,6 +123,10 @@
    "fieldtype": "Link",
    "label": "Final Item Group",
    "options": "Item Group"
+  },
+  {
+   "fieldname": "column_break_inqm",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "remnant_item_group",
@@ -147,157 +147,232 @@
    "options": "Item"
   },
   {
+   "description": "One glass type code per line (for example CLEAR, BRONZE, TINTED). These are the only type codes allowed in GLS-* Item codes and Glass Product Specifications.",
+   "fieldname": "glass_types_section",
+   "fieldtype": "Section Break",
+   "label": "Glass Types"
+  },
+  {
+   "default": "CLEAR\nBRONZE\nTINTED",
+   "fieldname": "allowed_glass_types",
+   "fieldtype": "Small Text",
+   "label": "Allowed Glass Types"
+  },
+  {
+   "description": "Rules that control how leftover glass is classified after cutting and what minimum area is charged to customers.",
    "fieldname": "rules_section",
    "fieldtype": "Section Break",
-   "label": "Rules"
+   "label": "Cutting and Remnant Rules"
   },
   {
    "default": "0.1",
+   "description": "Leftover glass with area below this threshold is classified as Scrap instead of Remnant.",
    "fieldname": "min_remnant_area_m2",
    "fieldtype": "Float",
-   "label": "Min Remnant Area (m\u00b2)"
+   "label": "Minimum Remnant Area (m\u00b2)"
   },
   {
    "default": "100",
+   "description": "Leftover glass with any side shorter than this is classified as Scrap instead of Remnant.",
    "fieldname": "min_remnant_side_mm",
    "fieldtype": "Int",
-   "label": "Min Remnant Side (mm)"
+   "label": "Minimum Remnant Side (mm)"
   },
   {
    "default": "0.05",
+   "description": "Glass pieces smaller than this area are still charged at this minimum.",
    "fieldname": "min_chargeable_area_m2",
    "fieldtype": "Float",
-   "label": "Min Chargeable Area (m\u00b2)"
+   "label": "Minimum Chargeable Area (m\u00b2)"
   },
   {
    "default": "3",
+   "description": "Cutting blade thickness. Reserved for optimizer / cutting layout calculations.",
    "fieldname": "kerf_mm",
    "fieldtype": "Float",
-   "label": "Kerf (mm)"
+   "label": "Kerf / Cutting Loss (mm)"
   },
   {
-   "default": "0",
-   "fieldname": "enable_cop",
-   "fieldtype": "Check",
-   "label": "Enable COP"
-  },
-  {
-   "fieldname": "pricing_section",
+   "description": "Default price lists used when no company or spec price list is configured. Raw buying cost priority: Company price list \u2192 Settings buying price list \u2192 Any buying Item Price. Raw selling price priority: Spec price list \u2192 Settings selling price list \u2192 Any selling Item Price.",
+   "fieldname": "price_lists_section",
    "fieldtype": "Section Break",
-   "label": "Processing Rates"
+   "label": "Price Lists"
   },
   {
-   "default": "0",
-   "fieldname": "polish_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Polish Rate (per m\u00b2)"
+   "description": "Fallback buying price list for raw sheet cost lookup when the company has no buying price list configured.",
+   "fieldname": "default_buying_price_list",
+   "fieldtype": "Link",
+   "label": "Default Raw Buying Price List",
+   "options": "Price List"
   },
   {
-   "default": "0",
-   "fieldname": "bevel_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Bevel Rate (per m\u00b2)"
+   "description": "Fallback selling price list used when a Glass Product Specification has no price list set.",
+   "fieldname": "default_selling_price_list",
+   "fieldtype": "Link",
+   "label": "Default Finished Selling Price List",
+   "options": "Price List"
   },
   {
-   "default": "0",
-   "fieldname": "holes_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Holes / Drilling Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "slots_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Slots Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "temper_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Tempered Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "sandblast_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Sandblast Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "laminate_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Laminated Rate (per m\u00b2)"
-  },
-  {
-   "fieldname": "column_break_fkfg",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_inqm",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_ysny",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "polish_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Polish Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "bevel_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Bevel Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "holes_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Holes / Drilling Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "slots_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Slots Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "temper_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Tempered Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "sandblast_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Sandblast Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "fieldname": "laminate_cost_per_m2",
-   "fieldtype": "Currency",
-   "label": "Laminated Cost (per m\u00b2)"
-  },
-  {
-   "description": "Flexible operation rates used by Glass Product Specification pricing. Polish and Bevel are priced per edge meter; Hole, Special Hole, Slot, and Special Slot per unit; Temper, Sandblast, and Laminate per square meter. Legacy fields above remain for Quotation Glass Piece pricing.",
+   "description": "Master default rates for all glass operations. Glass Product Specification copies these rates into its own table on first load. Users can override rates per spec without changing these settings.",
    "fieldname": "operation_rates_section",
    "fieldtype": "Section Break",
-   "label": "Operation Rates (Flexible)"
+   "label": "Operation Default Rates"
   },
   {
    "fieldname": "operation_rates",
    "fieldtype": "Table",
    "label": "Operation Rates",
    "options": "Glass Operation Rate"
+  },
+  {
+   "description": "Enable only when COP import/export actions are fully configured.",
+   "fieldname": "cop_section",
+   "fieldtype": "Section Break",
+   "label": "COP / Optimizer"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_cop",
+   "fieldtype": "Check",
+   "label": "Enable COP / Optimizer Integration"
+  },
+  {
+   "collapsible": 1,
+   "description": "Legacy fields kept for backward compatibility with Phase 0 Quotation Glass Piece pricing. Do not use for new configurations. These fields will be removed in a future version.",
+   "fieldname": "advanced_section",
+   "fieldtype": "Section Break",
+   "label": "Advanced / Legacy"
+  },
+  {
+   "default": "All Item Groups",
+   "description": "Deprecated. Use the specific item group fields in Item Defaults instead.",
+   "fieldname": "default_item_group",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Default Item Group",
+   "options": "Item Group"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Polish is now priced Per Edge Meter, not Per m\u00b2.",
+   "fieldname": "polish_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Polish Rate (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Bevel is now priced Per Edge Meter, not Per m\u00b2.",
+   "fieldname": "bevel_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Bevel Rate (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Holes are now priced Per Unit, not Per m\u00b2.",
+   "fieldname": "holes_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Holes / Drilling Rate (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Slots are now priced Per Unit, not Per m\u00b2.",
+   "fieldname": "slots_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Slots Rate (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead.",
+   "fieldname": "temper_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Tempered Rate (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead.",
+   "fieldname": "sandblast_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Sandblast Rate (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead.",
+   "fieldname": "laminate_rate_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Laminated Rate (per m\u00b2)"
+  },
+  {
+   "fieldname": "column_break_ysny",
+   "fieldtype": "Column Break",
+   "hidden": 1
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Polish is now priced Per Edge Meter, not Per m\u00b2.",
+   "fieldname": "polish_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Polish Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Bevel is now priced Per Edge Meter, not Per m\u00b2.",
+   "fieldname": "bevel_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Bevel Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Holes are now priced Per Unit, not Per m\u00b2.",
+   "fieldname": "holes_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Holes / Drilling Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead. Slots are now priced Per Unit, not Per m\u00b2.",
+   "fieldname": "slots_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Slots Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead.",
+   "fieldname": "temper_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Tempered Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead.",
+   "fieldname": "sandblast_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Sandblast Cost (per m\u00b2)"
+  },
+  {
+   "default": "0",
+   "description": "Deprecated. Use Operation Rates table instead.",
+   "fieldname": "laminate_cost_per_m2",
+   "fieldtype": "Currency",
+   "hidden": 1,
+   "label": "Laminated Cost (per m\u00b2)"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-06-13 16:41:11.126278",
+ "modified": "2026-06-28 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Factory Settings",

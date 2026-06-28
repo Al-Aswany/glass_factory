@@ -87,10 +87,10 @@ def build_design_attachment_summary(spec) -> str:
 def map_spec_to_transaction_row(spec) -> dict:
 	final_item = spec.get("final_item_code") or spec.get("generated_item")
 	item = frappe.get_doc("Item", final_item)
-	qty = 1
+	qty = flt(spec.get("qty")) or 1
 	rate = flt(spec.rate_per_piece)
 	amount = flt(qty * rate, 2)
-	total_area_m2 = flt(spec.area_m2)
+	total_area_m2 = flt(flt(spec.area_m2) * qty, 6)
 
 	return {
 		"item_code": final_item,

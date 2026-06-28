@@ -20,4 +20,7 @@ glass_factory.patches.v0_0.seed_default_operation_rates
 glass_factory.patches.v0_0.setup_spec_transaction_phase4
 glass_factory.patches.v0_0.setup_spec_production_phase5
 glass_factory.patches.v0_0.setup_glass_factory_desktop_icon
+glass_factory.patches.v0_0.backfill_raw_sheet_purchase_flags
+glass_factory.patches.v0_0.setup_spec_pricing_ux_phase
+glass_factory.patches.v0_0.setup_clean_glass_factory_settings
 # Patches added in this section will be executed after doctypes are migrated

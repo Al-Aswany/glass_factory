@@ -9,6 +9,7 @@ from glass_factory.glass_factory.piece_pricing import (
 	calculate_piece_rates,
 	chargeable_area_m2,
 	get_glass_rate_per_m2,
+	get_item_buying_rate,
 )
 
 
@@ -86,7 +87,7 @@ class TestPiecePricing(unittest.TestCase):
 
 	def test_get_glass_rate_per_m2_prorates_full_sheet_price(self):
 		with patch(
-			"glass_factory.glass_factory.piece_pricing.get_item_selling_rate",
+			"glass_factory.glass_factory.piece_pricing.get_item_buying_rate",
 			return_value=1000,
 		), patch(
 			"glass_factory.glass_factory.piece_pricing.frappe.get_cached_doc"
@@ -99,3 +100,22 @@ class TestPiecePricing(unittest.TestCase):
 
 		sheet_area = 3210 * 2250 / 1_000_000
 		self.assertAlmostEqual(rate_per_m2, flt(1000 / sheet_area, 6))
+
+	def test_get_item_buying_rate_uses_buying_item_price(self):
+		item_code = "GLS-CLEAR-8MM-3210X2250"
+		price_list = "Standard Buying"
+		if not frappe.db.exists("Item", item_code):
+			self.skipTest("Sample raw sheet Item is not installed on this site.")
+
+		with patch(
+			"glass_factory.glass_factory.piece_pricing.frappe.db.get_value",
+			side_effect=lambda doctype, filters, fieldname, **kwargs: (
+				500
+				if doctype == "Item Price"
+				and filters.get("buying") == 1
+				and filters.get("price_list") == price_list
+				else None
+			),
+		):
+			rate = get_item_buying_rate(item_code, price_list)
+		self.assertEqual(rate, 500)

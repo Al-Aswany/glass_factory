@@ -10,6 +10,7 @@ from glass_factory.glass_factory.spec_pricing import (
 	fetch_raw_sheet_rate,
 	get_operation_rate,
 	get_spec_currency,
+	pricing_result,
 )
 from glass_factory.glass_factory.tests.test_glass_product_specification import _base_spec_kwargs, _new_spec
 from glass_factory.glass_factory.tests.test_glass_product_specification_items import (
@@ -27,12 +28,14 @@ def _pricing_spec(**overrides):
 		"width_mm": 800,
 		"raw_sheet_item": RAW_SHEET_ITEM,
 		"raw_sheet_rate_per_piece": 100,
+		"raw_sheet_selling_rate_per_piece": 0,
 		"currency": "USD",
+		"qty": 1,
 	}
 	values.update(overrides)
 	doc = frappe._dict(values)
 	doc.area_m2 = flt((doc.length_mm * doc.width_mm) / 1_000_000, 6)
-	doc.total_area_m2 = doc.area_m2
+	doc.total_area_m2 = flt(doc.area_m2 * (flt(doc.qty) or 1), 6)
 
 	if any(
 		key in overrides
@@ -134,11 +137,25 @@ class TestGlassProductSpecificationPricingCalculations(unittest.TestCase):
 		expected = (2 * 2) + (1 * 4) + (3 * 1.5) + (1 * 3)
 		self.assertEqual(spec.unit_processing_amount_per_piece, expected)
 
-	def test_calculated_amount_per_piece_includes_raw_and_processing(self):
-		spec = _pricing_spec(polish=1, temper=1, hole_count=2)
+	def test_calculated_amount_per_piece_includes_raw_selling_and_processing(self):
+		# calculated_amount uses raw_selling (not raw_cost) + processing.
+		# With raw_sheet_selling_rate_per_piece set, raw_selling > 0.
+		spec = _pricing_spec(
+			polish=1, temper=1, hole_count=2, raw_sheet_selling_rate_per_piece=100
+		)
 		calculate_spec_pricing(spec)
-		expected = flt(spec.raw_cost_per_finished_piece + spec.processing_amount_per_piece, 2)
+		expected = flt(
+			spec.raw_selling_amount_per_finished_piece + spec.processing_amount_per_piece, 2
+		)
 		self.assertEqual(spec.calculated_amount_per_piece, expected)
+
+	def test_calculated_amount_per_piece_falls_back_to_raw_cost_when_no_selling_price(self):
+		# When no selling price is set, calculated_amount falls back to raw_cost + processing.
+		spec = _pricing_spec(polish=1, temper=1, raw_sheet_selling_rate_per_piece=0)
+		calculate_spec_pricing(spec)
+		self.assertEqual(spec.raw_selling_amount_per_finished_piece, 0)
+		expected = flt(spec.raw_cost_per_finished_piece + spec.processing_amount_per_piece, 2)
+		self.assertAlmostEqual(spec.calculated_amount_per_piece, expected, places=2)
 
 	def test_calculated_rate_per_m2_equals_amount_per_piece_divided_by_area(self):
 		spec = _pricing_spec(polish=1, temper=1)
@@ -276,6 +293,15 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 		doc = _new_spec(raw_sheet_rate_per_piece=150, raw_sheet_item=RAW_SHEET_ITEM)
 		rate = fetch_raw_sheet_rate(doc, fetch_from_item_price=True)
 		self.assertEqual(rate, 150)
+
+	def test_fetch_raw_sheet_rate_uses_buying_item_price(self):
+		doc = _new_spec(raw_sheet_item=RAW_SHEET_ITEM, currency="TZS", company=frappe.defaults.get_global_default("company"))
+		with patch(
+			"glass_factory.glass_factory.spec_pricing.get_item_buying_rate",
+			return_value=500,
+		):
+			rate = fetch_raw_sheet_rate(doc, fetch_from_item_price=True)
+		self.assertEqual(rate, 500)
 
 	def test_get_spec_currency_defaults_to_usd(self):
 		spec = frappe._dict({})

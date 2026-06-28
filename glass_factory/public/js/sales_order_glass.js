@@ -52,7 +52,12 @@ function gf_register_glass_piece_handlers(doctype) {
 	frappe.ui.form.on(doctype, {
 		refresh(frm) {
 			frm.set_query("raw_sheet_item", "glass_pieces", () => ({
-				filters: { gf_glass_item_role: ["in", ["Raw Sheet", "Remnant"]], disabled: 0 },
+				filters: {
+					gf_glass_item_role: ["in", ["Raw Sheet", "Remnant"]],
+					is_sales_item: 0,
+					is_purchase_item: 1,
+					disabled: 0,
+				},
 			}));
 			gf_toggle_items_grid(frm);
 			if (!frm.is_new() && frm.doc.docstatus === 0) {

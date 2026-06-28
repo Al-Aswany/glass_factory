@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe.utils import cint, flt
 
 from glass_factory.glass_factory.operation_rates import OPERATION_PRICING_BASIS
 
@@ -24,7 +25,7 @@ WAREHOUSE_FIELDS = (
 )
 
 ITEM_GROUP_FIELDS = (
-	("raw_item_group", "Raw Item Group"),
+	("raw_item_group", "Raw Sheet Item Group"),
 	("cut_wip_item_group", "Cut WIP Item Group"),
 	("final_item_group", "Final Item Group"),
 	("remnant_item_group", "Remnant Item Group"),
@@ -105,11 +106,12 @@ def _collect_setup_errors(settings, scope: str = "items") -> list[str]:
 	if scope in ("items", "full", "stock"):
 		errors.extend(_validate_allowed_glass_types(settings))
 		errors.extend(_validate_uom(settings))
-		errors.extend(_validate_item_groups(settings, scope))
+		errors.extend(_validate_item_groups(settings))
 		errors.extend(_validate_scrap_item(settings))
 
 	if scope in ("full",):
 		errors.extend(_validate_operation_rates(settings))
+		errors.extend(_validate_price_lists(settings))
 
 	if scope in ("stock", "full"):
 		errors.extend(_validate_warehouses(settings))
@@ -149,16 +151,10 @@ def _validate_warehouses(settings) -> list[str]:
 	return errors
 
 
-def _validate_item_groups(settings, scope: str) -> list[str]:
+def _validate_item_groups(settings) -> list[str]:
+	"""Validate that all required role-specific item groups are set."""
 	errors: list[str] = []
-	fields = ITEM_GROUP_FIELDS
-	if scope == "items":
-		fields = (
-			("default_item_group", "Default Item Group"),
-			*ITEM_GROUP_FIELDS,
-		)
-
-	for fieldname, label in fields:
+	for fieldname, label in ITEM_GROUP_FIELDS:
 		group = settings.get(fieldname)
 		if not group:
 			errors.append(f"{label} is not set in Glass Factory Settings. {SETTINGS_HELP}")
@@ -185,15 +181,82 @@ def _validate_uom(settings) -> list[str]:
 
 def _validate_operation_rates(settings) -> list[str]:
 	errors: list[str] = []
+	seen_enabled: set[tuple] = set()
+
 	for row in settings.get("operation_rates") or []:
 		if not row.get("operation"):
 			continue
+
+		# Pricing basis must match the canonical basis for the operation
 		expected = OPERATION_PRICING_BASIS.get(row.operation)
 		if expected and row.pricing_basis != expected:
 			errors.append(
 				f"Operation <b>{row.operation}</b> must use pricing basis "
 				f"<b>{expected}</b> (not <b>{row.pricing_basis}</b>)."
 			)
+
+		if not cint(row.enabled):
+			continue
+
+		# Selling rate must not be negative
+		rate = flt(row.get("rate") or 0)
+		if rate < 0:
+			errors.append(
+				f"Default Selling Rate for <b>{row.operation}</b> / {row.currency} must be >= 0."
+			)
+
+		# Cost rate must not be negative
+		cost_rate = flt(row.get("cost_rate") or 0)
+		if cost_rate < 0:
+			errors.append(
+				f"Default Cost Rate for <b>{row.operation}</b> / {row.currency} must be >= 0."
+			)
+
+		# No duplicate enabled rows for the same operation + currency + pricing_basis
+		key = (row.operation, row.currency or "", row.pricing_basis or "")
+		if key in seen_enabled:
+			errors.append(
+				f"Duplicate enabled operation rate found for "
+				f"<b>{row.operation}</b> / {row.currency} / {row.pricing_basis}."
+			)
+		else:
+			seen_enabled.add(key)
+
+	return errors
+
+
+def _validate_price_lists(settings) -> list[str]:
+	"""Validate that the optional default price lists are of the correct type."""
+	errors: list[str] = []
+
+	buying_pl = settings.get("default_buying_price_list")
+	if buying_pl:
+		if not frappe.db.exists("Price List", buying_pl):
+			errors.append(
+				f"Default Raw Buying Price List <b>{buying_pl}</b> does not exist. "
+				f"Create the Price List or update Glass Factory Settings."
+			)
+		else:
+			is_buying = frappe.db.get_value("Price List", buying_pl, "buying")
+			if not cint(is_buying):
+				errors.append(
+					f"Default Raw Buying Price List <b>{buying_pl}</b> is not marked as a buying price list."
+				)
+
+	selling_pl = settings.get("default_selling_price_list")
+	if selling_pl:
+		if not frappe.db.exists("Price List", selling_pl):
+			errors.append(
+				f"Default Finished Selling Price List <b>{selling_pl}</b> does not exist. "
+				f"Create the Price List or update Glass Factory Settings."
+			)
+		else:
+			is_selling = frappe.db.get_value("Price List", selling_pl, "selling")
+			if not cint(is_selling):
+				errors.append(
+					f"Default Finished Selling Price List <b>{selling_pl}</b> is not marked as a selling price list."
+				)
+
 	return errors
 
 

@@ -1,0 +1,121 @@
+{
+ "actions": [],
+ "creation": "2026-06-28 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "operation",
+  "operation_label",
+  "pricing_basis",
+  "quantity",
+  "column_break_op_p1",
+  "default_rate",
+  "rate",
+  "amount",
+  "currency",
+  "column_break_op_p2",
+  "is_overridden",
+  "source",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "operation",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operation",
+   "options": "Polish\nBevel\nHole\nSpecial Hole\nSlot\nSpecial Slot\nTemper\nSandblast\nLaminate",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "operation_label",
+   "fieldtype": "Data",
+   "label": "Label",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pricing_basis",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Basis",
+   "options": "Per Square Meter\nPer Edge Meter\nPer Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty",
+   "precision": "4",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_op_p1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_rate",
+   "fieldtype": "Currency",
+   "label": "Default Rate",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Rate",
+   "options": "currency"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_op_p2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_overridden",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Override",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Source",
+   "options": "Settings\nManual",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-28 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Glass Factory",
+ "name": "Glass Spec Operation Pricing",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_order": 50,
+ "track_changes": 0
+}

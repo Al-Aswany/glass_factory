@@ -292,6 +292,13 @@ def _update_glass_item_fields(item, role: str, spec: GlassSpec) -> None:
 			changed = True
 	if _ensure_item_default_warehouse(item, role):
 		changed = True
+	if role in ("Raw Sheet", "Remnant"):
+		if cint(item.get("is_sales_item")):
+			item.is_sales_item = 0
+			changed = True
+		if not cint(item.get("is_purchase_item")):
+			item.is_purchase_item = 1
+			changed = True
 	if changed and not item.is_new():
 		item.save(ignore_permissions=True)
 
