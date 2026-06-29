@@ -33,24 +33,7 @@
   "operation_rates_section",
   "operation_rates",
   "cop_section",
-  "enable_cop",
-  "advanced_section",
-  "default_item_group",
-  "polish_rate_per_m2",
-  "bevel_rate_per_m2",
-  "holes_rate_per_m2",
-  "slots_rate_per_m2",
-  "temper_rate_per_m2",
-  "sandblast_rate_per_m2",
-  "laminate_rate_per_m2",
-  "column_break_ysny",
-  "polish_cost_per_m2",
-  "bevel_cost_per_m2",
-  "holes_cost_per_m2",
-  "slots_cost_per_m2",
-  "temper_cost_per_m2",
-  "sandblast_cost_per_m2",
-  "laminate_cost_per_m2"
+  "enable_cop"
  ],
  "fields": [
   {
@@ -225,154 +208,22 @@
    "options": "Glass Operation Rate"
   },
   {
-   "description": "Enable only when COP import/export actions are fully configured.",
+   "collapsible": 1,
+   "description": "COP optimizer integration is experimental. Enable only when export/import actions are fully configured and wired.",
    "fieldname": "cop_section",
    "fieldtype": "Section Break",
-   "label": "COP / Optimizer"
+   "label": "COP / Optimizer (Experimental)"
   },
   {
    "default": "0",
    "fieldname": "enable_cop",
    "fieldtype": "Check",
    "label": "Enable COP / Optimizer Integration"
-  },
-  {
-   "collapsible": 1,
-   "description": "Legacy fields kept for backward compatibility with Phase 0 Quotation Glass Piece pricing. Do not use for new configurations. These fields will be removed in a future version.",
-   "fieldname": "advanced_section",
-   "fieldtype": "Section Break",
-   "label": "Advanced / Legacy"
-  },
-  {
-   "default": "All Item Groups",
-   "description": "Deprecated. Use the specific item group fields in Item Defaults instead.",
-   "fieldname": "default_item_group",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Default Item Group",
-   "options": "Item Group"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Polish is now priced Per Edge Meter, not Per m\u00b2.",
-   "fieldname": "polish_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Polish Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Bevel is now priced Per Edge Meter, not Per m\u00b2.",
-   "fieldname": "bevel_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Bevel Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Holes are now priced Per Unit, not Per m\u00b2.",
-   "fieldname": "holes_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Holes / Drilling Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Slots are now priced Per Unit, not Per m\u00b2.",
-   "fieldname": "slots_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Slots Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead.",
-   "fieldname": "temper_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Tempered Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead.",
-   "fieldname": "sandblast_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Sandblast Rate (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead.",
-   "fieldname": "laminate_rate_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Laminated Rate (per m\u00b2)"
-  },
-  {
-   "fieldname": "column_break_ysny",
-   "fieldtype": "Column Break",
-   "hidden": 1
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Polish is now priced Per Edge Meter, not Per m\u00b2.",
-   "fieldname": "polish_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Polish Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Bevel is now priced Per Edge Meter, not Per m\u00b2.",
-   "fieldname": "bevel_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Bevel Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Holes are now priced Per Unit, not Per m\u00b2.",
-   "fieldname": "holes_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Holes / Drilling Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead. Slots are now priced Per Unit, not Per m\u00b2.",
-   "fieldname": "slots_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Slots Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead.",
-   "fieldname": "temper_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Tempered Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead.",
-   "fieldname": "sandblast_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Sandblast Cost (per m\u00b2)"
-  },
-  {
-   "default": "0",
-   "description": "Deprecated. Use Operation Rates table instead.",
-   "fieldname": "laminate_cost_per_m2",
-   "fieldtype": "Currency",
-   "hidden": 1,
-   "label": "Laminated Cost (per m\u00b2)"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-06-28 18:00:00.000000",
+ "modified": "2026-06-29 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Factory Settings",

@@ -7,7 +7,7 @@ from frappe.model.document import Document
 from frappe.utils import cint, flt
 
 from glass_factory.glass_factory.item_resolver import PROCESS_ORDER, get_item_glass_meta, resolve_row_items
-from glass_factory.glass_factory.piece_pricing import apply_piece_rates, calculate_piece_rates
+from glass_factory.glass_factory.piece_pricing import get_glass_rate_per_m2, chargeable_area_m2
 from glass_factory.glass_factory.spec_transaction import is_spec_transaction_row
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 
@@ -310,21 +310,27 @@ def _build_quotation_items_from_glass(
 
 @frappe.whitelist()
 def calculate_glass_piece_rates(glass_pieces, price_list=None, company=None):
-	"""Recalculate glass piece rates for client-side grid updates."""
+	"""Recalculate glass piece rates for client-side grid updates (legacy glass_pieces flow)."""
 	glass_pieces = frappe.parse_json(glass_pieces)
-	return [
-		apply_piece_rates(piece, price_list=price_list, company=company)
-		for piece in glass_pieces
-	]
+	return [_apply_rates_to_piece(frappe._dict(piece), price_list=price_list, company=company) for piece in glass_pieces]
 
 
-def _apply_rates_to_piece(piece, price_list=None, company=None) -> None:
-	rates = calculate_piece_rates(piece, price_list=price_list, company=company)
+def _apply_rates_to_piece(piece, price_list=None, company=None):
+	d = piece if isinstance(piece, frappe._dict) else frappe._dict(piece.as_dict())
+	length_mm = flt(d.length_mm)
+	width_mm = flt(d.width_mm)
+	if length_mm > 0 and width_mm > 0:
+		area = chargeable_area_m2(length_mm, width_mm)
+		glass_rate = flt(get_glass_rate_per_m2(d.raw_sheet_item, price_list, company) * area, 2)
+	else:
+		glass_rate = 0
+	rates = {"glass_rate": glass_rate, "processing_rate": 0, "rate": glass_rate}
 	if isinstance(piece, Document):
-		for fieldname, value in rates.items():
-			piece.set(fieldname, value)
+		for k, v in rates.items():
+			piece.set(k, v)
 	else:
 		piece.update(rates)
+	return piece
 
 
 def _quotation_pricing_context(doc):

@@ -23,4 +23,6 @@ glass_factory.patches.v0_0.setup_glass_factory_desktop_icon
 glass_factory.patches.v0_0.backfill_raw_sheet_purchase_flags
 glass_factory.patches.v0_0.setup_spec_pricing_ux_phase
 glass_factory.patches.v0_0.setup_clean_glass_factory_settings
+glass_factory.patches.v0_0.cleanup_legacy_glass_pieces_and_pricing
+glass_factory.patches.v0_0.fix_missing_spec_custom_fields
 # Patches added in this section will be executed after doctypes are migrated

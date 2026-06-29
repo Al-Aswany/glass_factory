@@ -103,9 +103,11 @@
    "options": "Cutting Job Source Sheet"
   },
   {
+   "collapsible": 1,
+   "collapsed": 1,
    "fieldname": "section_optimization",
    "fieldtype": "Section Break",
-   "label": "Glass Optimizer"
+   "label": "Glass Optimizer (Experimental)"
   },
   {
    "default": "Not Exported",
@@ -164,6 +166,8 @@
    "read_only": 1
   },
   {
+   "collapsible": 1,
+   "collapsed": 1,
    "fieldname": "section_optimization_results",
    "fieldtype": "Section Break",
    "label": "Optimization Results"
@@ -193,9 +197,11 @@
    "read_only": 1
   },
   {
+   "collapsible": 1,
+   "collapsed": 1,
    "fieldname": "section_cop",
    "fieldtype": "Section Break",
-   "label": "COP Optional"
+   "label": "COP Files (Experimental)"
   },
   {
    "fieldname": "cop_files",
@@ -241,7 +247,7 @@
   }
  ],
  "is_submittable": 1,
- "modified": "2026-06-07 00:00:00.000000",
+ "modified": "2026-06-29 02:00:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Cutting Job",

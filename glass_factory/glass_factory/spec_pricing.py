@@ -30,11 +30,6 @@ BOOLEAN_OPERATION_FIELDS = {
     "Laminate": "laminate",
 }
 
-LEGACY_AREA_RATE_FIELDS = {
-    "Temper": "temper_rate_per_m2",
-    "Sandblast": "sandblast_rate_per_m2",
-    "Laminate": "laminate_rate_per_m2",
-}
 
 OPERATION_ORDER = [
     "Polish",
@@ -70,12 +65,7 @@ def get_spec_currency(spec) -> str:
 
 
 def get_operation_rate(operation: str, currency: str, pricing_basis: str) -> float:
-    """Return configured selling rate for an operation from the flexible child table.
-
-    Falls back to legacy per-m² settings fields for Temper/Sandblast/Laminate only
-    (backward compatibility for Phase 0 Quotation Glass Piece pricing).
-    """
-    settings = None
+    """Return configured selling rate for an operation from the Operation Rates table."""
     if frappe.db.exists("DocType", "Glass Factory Settings"):
         settings = frappe.get_single("Glass Factory Settings")
         for row in settings.get("operation_rates") or []:
@@ -86,12 +76,6 @@ def get_operation_rate(operation: str, currency: str, pricing_basis: str) -> flo
                 and cint(row.enabled)
             ):
                 return flt(row.rate)
-
-    # Legacy fallback: only for area operations whose old label was also per m²
-    legacy_field = LEGACY_AREA_RATE_FIELDS.get(operation)
-    if legacy_field and pricing_basis == "Per Square Meter":
-        return flt(settings.get(legacy_field)) if settings else 0
-
     return 0
 
 
