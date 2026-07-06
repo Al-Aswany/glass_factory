@@ -144,10 +144,16 @@ after_install = "glass_factory.install.after_install"
 # Hook on document methods and events
 
 doc_events = {
+	"Glass Product Specification": {
+		"on_update": "glass_factory.glass_factory.design_attachments.on_glass_product_specification_save",
+		"on_update_after_submit": "glass_factory.glass_factory.design_attachments.on_glass_product_specification_save",
+		"on_submit": "glass_factory.glass_factory.design_attachments.on_glass_product_specification_save",
+	},
 	"Quotation": {
 		"before_validate": "glass_factory.glass_factory.selling_validations.resolve_glass_items",
 		"validate": "glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
 		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
+		"on_update": "glass_factory.glass_factory.design_attachments.on_document_update_sync_design_attachments",
 	},
 	"Sales Order": {
 		"before_validate": "glass_factory.glass_factory.selling_validations.resolve_glass_items",
@@ -156,6 +162,13 @@ doc_events = {
 			"glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
 		],
 		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
+		"on_update": "glass_factory.glass_factory.design_attachments.on_document_update_sync_design_attachments",
+	},
+	"Cutting Job": {
+		"on_update": "glass_factory.glass_factory.design_attachments.on_document_update_sync_design_attachments",
+	},
+	"Glass Processing Job": {
+		"on_update": "glass_factory.glass_factory.design_attachments.on_document_update_sync_design_attachments",
 	},
 	"Delivery Note": {
 		"validate": "glass_factory.glass_factory.selling_validations.validate_delivery_note",

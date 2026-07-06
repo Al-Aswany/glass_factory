@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import flt, nowdate, nowtime
+from frappe.utils import cint, flt, nowdate, nowtime
 
 from erpnext.stock.utils import get_incoming_rate
 
@@ -14,6 +14,10 @@ from glass_factory.glass_factory.item_resolver import (
 	ensure_remnant_item,
 	get_scrap_item,
 	item_role,
+)
+from glass_factory.glass_factory.processing_cost import (
+	compute_processing_job_internal_cost,
+	validate_processing_cost_expense_account,
 )
 from glass_factory.glass_factory.settings_validation import get_validated_stock_settings
 
@@ -138,6 +142,7 @@ def build_cutting_repack(cutting_job):
 	if not se.items:
 		frappe.throw("Cutting stock movement has no rows to post.")
 
+	se.set("additional_costs", [])
 	_allocate_cutting_repack_rates(se, cutting_job)
 	return se
 
@@ -353,6 +358,8 @@ def build_processing_repack(processing_job):
 
 	if not se.items:
 		frappe.throw("Final stock movement has no rows to post.")
+
+	_apply_processing_cost_capitalization(se, processing_job)
 	return se
 
 
@@ -547,3 +554,40 @@ def _allocate_cutting_repack_rates(se, cutting_job) -> None:
 def _finished_row_weight(row) -> float:
 	area_m2 = _item_area_m2(row.item_code)
 	return flt(row.transfer_qty) * (area_m2 if area_m2 > 0 else 1)
+
+
+def _glass_factory_settings():
+	return frappe.get_single("Glass Factory Settings")
+
+
+def _apply_processing_cost_capitalization(se, processing_job) -> None:
+	"""Add Repack #2 additional costs when internal processing cost capitalization is enabled."""
+	settings = _glass_factory_settings()
+	se.set("additional_costs", [])
+
+	if not cint(settings.get("capitalize_processing_costs")):
+		return
+
+	processing_cost = compute_processing_job_internal_cost(processing_job, se.company)
+	if processing_cost <= 0:
+		return
+
+	expense_account = validate_processing_cost_expense_account(settings, processing_cost)
+	company_currency = frappe.get_cached_value("Company", se.company, "default_currency") or "USD"
+
+	se.append(
+		"additional_costs",
+		{
+			"description": "Glass Factory processing cost",
+			"expense_account": expense_account,
+			"amount": processing_cost,
+			"base_amount": processing_cost,
+			"account_currency": company_currency,
+			"exchange_rate": 1,
+		},
+	)
+
+
+# Explicit stage names for the production costing model.
+create_cutting_repack_stock_entry = build_cutting_repack
+create_finished_goods_repack_stock_entry = build_processing_repack

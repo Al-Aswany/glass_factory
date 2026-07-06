@@ -112,6 +112,7 @@ def _collect_setup_errors(settings, scope: str = "items") -> list[str]:
 	if scope in ("full",):
 		errors.extend(_validate_operation_rates(settings))
 		errors.extend(_validate_price_lists(settings))
+		errors.extend(_validate_processing_cost_capitalization(settings))
 
 	if scope in ("stock", "full"):
 		errors.extend(_validate_warehouses(settings))
@@ -256,6 +257,34 @@ def _validate_price_lists(settings) -> list[str]:
 				errors.append(
 					f"Default Finished Selling Price List <b>{selling_pl}</b> is not marked as a selling price list."
 				)
+
+	return errors
+
+
+def _validate_processing_cost_capitalization(settings) -> list[str]:
+	"""Validate processing cost capitalization settings on save."""
+	if not cint(settings.get("capitalize_processing_costs")):
+		return []
+
+	errors: list[str] = []
+	expense_account = settings.get("processing_cost_expense_account")
+	if not expense_account:
+		errors.append(
+			"Processing Cost Expense Account is required when processing cost capitalization is enabled. "
+			f"{SETTINGS_HELP}"
+		)
+	elif not frappe.db.exists("Account", expense_account):
+		errors.append(
+			f"Processing Cost Expense Account <b>{expense_account}</b> does not exist. "
+			f"Create the account or update Glass Factory Settings."
+		)
+
+	cost_center = settings.get("processing_cost_cost_center")
+	if cost_center and not frappe.db.exists("Cost Center", cost_center):
+		errors.append(
+			f"Processing Cost Cost Center <b>{cost_center}</b> does not exist. "
+			f"Create the cost center or update Glass Factory Settings."
+		)
 
 	return errors
 

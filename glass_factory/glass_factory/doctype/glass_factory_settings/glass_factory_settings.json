@@ -32,6 +32,10 @@
   "default_selling_price_list",
   "operation_rates_section",
   "operation_rates",
+  "processing_cost_section",
+  "capitalize_processing_costs",
+  "processing_cost_expense_account",
+  "processing_cost_cost_center",
   "cop_section",
   "enable_cop"
  ],
@@ -206,6 +210,34 @@
    "fieldtype": "Table",
    "label": "Operation Rates",
    "options": "Glass Operation Rate"
+  },
+  {
+   "description": "Control whether internal processing costs are capitalized into finished goods stock value during Repack #2.",
+   "fieldname": "processing_cost_section",
+   "fieldtype": "Section Break",
+   "label": "Production Cost Capitalization"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, Repack #2 adds internal processing cost to finished goods valuation via Stock Entry Additional Costs.",
+   "fieldname": "capitalize_processing_costs",
+   "fieldtype": "Check",
+   "label": "Capitalize Processing Costs"
+  },
+  {
+   "depends_on": "eval:doc.capitalize_processing_costs",
+   "description": "Expense account credited when processing cost is capitalized into finished goods stock.",
+   "fieldname": "processing_cost_expense_account",
+   "fieldtype": "Link",
+   "label": "Processing Cost Expense Account",
+   "options": "Account"
+  },
+  {
+   "depends_on": "eval:doc.capitalize_processing_costs",
+   "fieldname": "processing_cost_cost_center",
+   "fieldtype": "Link",
+   "label": "Processing Cost Cost Center",
+   "options": "Cost Center"
   },
   {
    "collapsible": 1,

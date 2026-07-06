@@ -14,6 +14,7 @@ from glass_factory.glass_factory.item_resolver import (
     spec_is_used_in_transaction,
     validate_glass_type,
 )
+from glass_factory.glass_factory.design_attachments import sync_design_attachments_to_item
 from glass_factory.glass_factory.spec_pricing import (
     build_operation_pricing_rows,
     calculate_raw_cost,
@@ -466,6 +467,7 @@ class GlassProductSpecification(Document):
         self.generation_status = "Generated"
         self.status = "Items Generated"
         self.save()
+        sync_design_attachments_to_item(self)
 
         return {
             "raw_item_code": self.raw_item_code,

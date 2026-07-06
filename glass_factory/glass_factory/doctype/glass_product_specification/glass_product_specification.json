@@ -219,6 +219,7 @@
    "default": "1",
    "fieldname": "qty",
    "fieldtype": "Float",
+   "hidden": 1,
    "label": "Qty",
    "precision": "2",
    "read_only_depends_on": "eval:doc.docstatus==1"
@@ -722,7 +723,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-07-06 04:25:20.926167",
+ "modified": "2026-07-06 05:11:17.303609",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Product Specification",
