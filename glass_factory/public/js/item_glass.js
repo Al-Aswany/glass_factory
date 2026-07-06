@@ -7,6 +7,7 @@ frappe.ui.form.on("Item", {
 		gf_toggle_glass_dimension_fields(frm);
 		gf_set_allowed_glass_types_help(frm);
 		gf_add_build_code_button(frm);
+		gf_default_raw_sheet_sales_flag(frm);
 		if (frm.doc.item_code) {
 			gf_sync_glass_fields_from_code(frm, { silent: true });
 		}
@@ -19,8 +20,21 @@ frappe.ui.form.on("Item", {
 	gf_glass_item_role(frm) {
 		gf_toggle_glass_dimension_fields(frm);
 		gf_add_build_code_button(frm);
+		gf_default_raw_sheet_sales_flag(frm);
 	},
 });
+
+function gf_default_raw_sheet_sales_flag(frm) {
+	// Raw sheets are consumed into Cut WIP / Final glass items, not sold directly, so
+	// "Allow Sales" should default to unchecked for them. Only applies the default on a
+	// brand-new Item; never overrides a value the user has already saved/set explicitly.
+	if (!frm.is_new() || frm.doc.gf_glass_item_role !== "Raw Sheet") {
+		return;
+	}
+	if (frm.doc.is_sales_item) {
+		frm.set_value("is_sales_item", 0);
+	}
+}
 
 function gf_toggle_glass_dimension_fields(frm) {
 	const is_glass = !!frm.doc.gf_glass_item_role;
@@ -257,6 +271,7 @@ function gf_set_built_item_code(frm, preview) {
 	if (!frm.doc.gf_glass_item_role) {
 		frm.set_value("gf_glass_item_role", preview.glass_item_role || "Raw Sheet");
 	}
+	gf_default_raw_sheet_sales_flag(frm);
 	if (!frm.doc.item_group && preview.item_group) {
 		frm.set_value("item_group", preview.item_group);
 	}
