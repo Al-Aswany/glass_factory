@@ -40,7 +40,7 @@ class TestSellingValidations(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			validate_stock_entry(doc)
 
-	def test_validate_stock_entry_rejects_non_repack(self):
+	def test_validate_stock_entry_rejects_non_repack_purpose(self):
 		doc = MagicMock(
 			doctype="Stock Entry",
 			gf_created_by_glass_factory=1,
@@ -53,3 +53,16 @@ class TestSellingValidations(unittest.TestCase):
 		)
 		with self.assertRaises(frappe.ValidationError):
 			validate_stock_entry(doc)
+
+	def test_validate_stock_entry_accepts_glass_cutting_repack_type(self):
+		doc = frappe._dict(
+			doctype="Stock Entry",
+			gf_created_by_glass_factory=1,
+			gf_cutting_job="CJ-0001",
+			gf_processing_job=None,
+			stock_entry_type="Glass Cutting Repack",
+			purpose="Repack",
+			gf_glass_stock_flow="Raw to Cut WIP",
+			items=[],
+		)
+		validate_stock_entry(doc)

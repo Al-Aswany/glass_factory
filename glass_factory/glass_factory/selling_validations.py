@@ -7,6 +7,7 @@ from frappe.utils import cint, flt
 
 from erpnext.stock.doctype.item.item import get_item_defaults
 
+from glass_factory.glass_factory.glass_stock_entry_types import GLASS_REPACK_STOCK_ENTRY_TYPES
 from glass_factory.glass_factory.item_resolver import item_role, resolve_row_items, validate_final_item_matches_row
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 from glass_factory.glass_factory.spec_transaction import SPEC_TRANSACTION_ROW_FIELDS, is_spec_transaction_row
@@ -183,8 +184,8 @@ def validate_stock_entry(doc, method=None):
 	):
 		return
 
-	if doc.stock_entry_type != "Repack" or doc.purpose != "Repack":
-		frappe.throw("Simple glass production must use the standard Repack Stock Entry type.")
+	if doc.purpose != "Repack" or doc.stock_entry_type not in GLASS_REPACK_STOCK_ENTRY_TYPES:
+		frappe.throw("Simple glass production must use a Repack Stock Entry type.")
 
 	flow = doc.get("gf_glass_stock_flow")
 	if doc.get("gf_cutting_job") and doc.get("gf_processing_job") and flow not in ("Raw to Cut WIP", "Cut WIP to Final"):

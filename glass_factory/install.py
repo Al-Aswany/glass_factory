@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
+from glass_factory.glass_factory.glass_stock_entry_types import ensure_glass_stock_entry_types
 from glass_factory.glass_factory.settings_validation import DEMO_ALLOWED_GLASS_TYPES, get_area_uom
 from glass_factory.glass_factory.operation_rates import default_operation_rate_rows
 
@@ -28,6 +29,7 @@ def create_phase0_foundation():
 	create_item_groups()
 	abbr = create_warehouses()
 	seed_glass_factory_settings(abbr)
+	ensure_glass_stock_entry_types()
 
 
 def create_roles():

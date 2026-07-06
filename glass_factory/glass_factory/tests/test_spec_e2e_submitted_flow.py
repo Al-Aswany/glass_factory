@@ -587,7 +587,8 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
 
         se1 = frappe.get_doc("Stock Entry", repack1_name)
         self.assertEqual(se1.docstatus,           1,           "Repack #1 must be submitted")
-        self.assertEqual(se1.stock_entry_type,    "Repack",    "type must be Repack")
+        self.assertEqual(se1.stock_entry_type,    "Glass Cutting Repack",    "type must be Glass Cutting Repack")
+        self.assertEqual(se1.purpose,             "Repack",                  "purpose must be Repack")
         self.assertEqual(se1.gf_cutting_job,      job.name,    "must link to Cutting Job")
         self.assertEqual(se1.gf_glass_stock_flow, "Raw to Cut WIP")
 
@@ -653,7 +654,8 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
 
         se2 = frappe.get_doc("Stock Entry", repack2_name)
         self.assertEqual(se2.docstatus,           1,                "Repack #2 must be submitted")
-        self.assertEqual(se2.stock_entry_type,    "Repack",         "type must be Repack")
+        self.assertEqual(se2.stock_entry_type,    "Glass Processing Repack", "type must be Glass Processing Repack")
+        self.assertEqual(se2.purpose,             "Repack",                  "purpose must be Repack")
         self.assertEqual(se2.gf_processing_job,   pj.name,          "must link to Processing Job")
         self.assertEqual(se2.gf_glass_stock_flow, "Cut WIP to Final")
 

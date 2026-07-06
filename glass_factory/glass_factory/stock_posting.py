@@ -8,6 +8,10 @@ from frappe.utils import cint, flt, nowdate, nowtime
 from erpnext.stock.utils import get_incoming_rate
 
 from glass_factory.glass_factory.batch_utils import batch_row_fields, ensure_output_batch, ensure_remnant_batch
+from glass_factory.glass_factory.glass_stock_entry_types import (
+	GLASS_CUTTING_REPACK_STOCK_ENTRY_TYPE,
+	GLASS_PROCESSING_REPACK_STOCK_ENTRY_TYPE,
+)
 from glass_factory.glass_factory.spec_production import stock_entry_trace_fields
 from glass_factory.glass_factory.item_resolver import (
 	_parse_raw_item_code,
@@ -43,7 +47,7 @@ def build_cutting_repack(cutting_job):
 		_validate_optimization_sheets(cutting_job, used_qty_by_sheet_id)
 
 	se = frappe.new_doc("Stock Entry")
-	se.stock_entry_type = "Repack"
+	se.stock_entry_type = GLASS_CUTTING_REPACK_STOCK_ENTRY_TYPE
 	se.purpose = "Repack"
 	se.company = company
 	se.posting_date = nowdate()
@@ -258,7 +262,7 @@ def build_processing_repack(processing_job):
 	company = _company_from_processing_job(processing_job)
 
 	se = frappe.new_doc("Stock Entry")
-	se.stock_entry_type = "Repack"
+	se.stock_entry_type = GLASS_PROCESSING_REPACK_STOCK_ENTRY_TYPE
 	se.purpose = "Repack"
 	se.company = company
 	se.posting_date = nowdate()
