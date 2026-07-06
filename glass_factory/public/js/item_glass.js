@@ -36,7 +36,7 @@ function gf_add_build_code_button(frm) {
 		return;
 	}
 
-	frm.add_custom_button(__("Build Raw Sheet Code"), () => {
+	frm.add_custom_button(__("Build Raw Sheet Item Code"), () => {
 		gf_show_build_raw_code_dialog(frm);
 	}, __("Glass"));
 }
@@ -125,27 +125,41 @@ function gf_show_build_raw_code_dialog(frm) {
 					fieldname: "thickness_mm",
 					fieldtype: "Float",
 					label: __("Thickness (mm)"),
+					precision: 2,
 					reqd: 1,
-					default: frm.doc.gf_thickness_mm || "",
+					default: gf_clean_number(frm.doc.gf_thickness_mm),
 				},
 				{
 					fieldname: "length_mm",
 					fieldtype: "Float",
 					label: __("Length (mm)"),
+					precision: 0,
 					reqd: 1,
-					default: frm.doc.gf_length_mm || "",
+					default: gf_clean_number(frm.doc.gf_length_mm),
 				},
 				{
 					fieldname: "width_mm",
 					fieldtype: "Float",
 					label: __("Width (mm)"),
+					precision: 0,
 					reqd: 1,
-					default: frm.doc.gf_width_mm || "",
+					default: gf_clean_number(frm.doc.gf_width_mm),
+				},
+				{
+					fieldname: "column_break_preview",
+					fieldtype: "Column Break",
 				},
 				{
 					fieldname: "item_code_preview",
 					fieldtype: "Data",
 					label: __("Item Code Preview"),
+					read_only: 1,
+				},
+				{
+					fieldname: "sheet_area_m2",
+					fieldtype: "Float",
+					label: __("Sheet Area (m²)"),
+					precision: 3,
 					read_only: 1,
 				},
 			],
@@ -159,6 +173,7 @@ function gf_show_build_raw_code_dialog(frm) {
 			const values = d.get_values();
 			if (!values.glass_type || !values.thickness_mm || !values.length_mm || !values.width_mm) {
 				d.set_value("item_code_preview", "");
+				d.set_value("sheet_area_m2", 0);
 				return;
 			}
 
@@ -172,7 +187,9 @@ function gf_show_build_raw_code_dialog(frm) {
 				},
 				async: true,
 			}).then(({ message }) => {
-				d.set_value("item_code_preview", message && message.valid ? message.item_code : "");
+				const valid = message && message.valid;
+				d.set_value("item_code_preview", valid ? message.item_code : "");
+				d.set_value("sheet_area_m2", valid ? message.sheet_area_m2 : 0);
 			});
 		};
 
@@ -223,6 +240,12 @@ function gf_apply_raw_item_code_preview(frm, dialog, values) {
 	});
 }
 
+function gf_clean_number(value) {
+	// Avoid showing 0 / 0.000 placeholders for dimensions that are not yet set.
+	const num = flt(value);
+	return num > 0 ? num : "";
+}
+
 function gf_set_built_item_code(frm, preview) {
 	frm.set_value("item_code", preview.item_code);
 	if (!frm.doc.item_name || frm.doc.item_name === frm.doc.item_code) {
@@ -234,8 +257,47 @@ function gf_set_built_item_code(frm, preview) {
 	if (!frm.doc.item_group && preview.item_group) {
 		frm.set_value("item_group", preview.item_group);
 	}
+	if (!frm.doc.stock_uom && preview.stock_uom) {
+		// stock_uom stays the sheet/stock UOM used by the app; only set it when blank
+		// (e.g. brand-new Item) and never overwrite an existing value.
+		frm.set_value("stock_uom", preview.stock_uom);
+	}
 	frm.set_value("gf_base_glass_type", preview.gf_base_glass_type || "");
 	frm.set_value("gf_thickness_mm", preview.gf_thickness_mm || 0);
 	frm.set_value("gf_length_mm", preview.gf_length_mm || 0);
 	frm.set_value("gf_width_mm", preview.gf_width_mm || 0);
+
+	if (frm.fields_dict.gf_sheet_area_m2) {
+		frm.set_value("gf_sheet_area_m2", preview.sheet_area_m2 || 0);
+	}
+
+	gf_apply_raw_sheet_uom_conversion(frm, preview.sheet_area_m2, preview.area_uom);
+}
+
+function gf_apply_raw_sheet_uom_conversion(frm, sheet_area_m2, area_uom) {
+	// Encode "1 Sheet (stock UOM) = sheet_area_m2 Square Meter". ERPNext's UOM Conversion
+	// Detail.conversion_factor means "1 <uom> = conversion_factor <stock_uom>", so the
+	// Square Meter row factor is the inverse of the sheet area: 1 m² = (1 / sheet_area_m2) sheets.
+	// Idempotent: update the existing row if one already exists for this UOM, never
+	// append a duplicate row.
+	if (!flt(sheet_area_m2) || !area_uom || !frm.fields_dict.uoms) {
+		return;
+	}
+	if ((frm.doc.stock_uom || "").trim() === area_uom) {
+		// Stock UOM is already the area UOM; no conversion row is needed.
+		return;
+	}
+
+	const conversion_factor = flt(1 / flt(sheet_area_m2), 6);
+	const existing = (frm.doc.uoms || []).find((row) => row.uom === area_uom);
+	if (existing) {
+		if (flt(existing.conversion_factor) !== conversion_factor) {
+			frappe.model.set_value(existing.doctype, existing.name, "conversion_factor", conversion_factor);
+		}
+	} else {
+		const row = frm.add_child("uoms");
+		frappe.model.set_value(row.doctype, row.name, "uom", area_uom);
+		frappe.model.set_value(row.doctype, row.name, "conversion_factor", conversion_factor);
+	}
+	frm.refresh_field("uoms");
 }

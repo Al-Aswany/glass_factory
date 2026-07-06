@@ -63,6 +63,39 @@ def get_glass_rate_per_m2(item_code: str | None, price_list: str | None = None, 
 	return unit_rate
 
 
+def get_raw_glass_selling_rate_per_m2(
+	item_code: str,
+	price_list: str | None = None,
+	*,
+	currency: str | None = None,
+) -> float:
+	"""Look up a raw glass sheet's selling rate per Square Meter from Item Price.
+
+	Strict lookup only: selling=1, uom=Square Meter (the app's configured area UOM).
+	There is intentionally no fallback to a per-sheet selling Item Price — raw glass
+	selling must always be priced per m² using a dedicated Item Price record, since the
+	buying side is priced per full sheet.
+	"""
+	if not item_code:
+		return 0
+
+	from glass_factory.glass_factory.settings_validation import get_area_uom
+
+	filters = {"item_code": item_code, "selling": 1, "uom": get_area_uom()}
+	if price_list:
+		filters["price_list"] = price_list
+	if currency:
+		filters["currency"] = currency
+
+	rate = frappe.db.get_value(
+		"Item Price",
+		filters,
+		"price_list_rate",
+		order_by="valid_from desc, creation desc",
+	)
+	return flt(rate) if rate else 0
+
+
 def get_item_selling_rate(item_code: str, price_list: str | None = None, company: str | None = None) -> float:
 	if price_list:
 		filters = {"item_code": item_code, "price_list": price_list, "selling": 1}

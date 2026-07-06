@@ -671,7 +671,40 @@ def preview_raw_item_code(
 		"gf_thickness_mm": spec.thickness_mm,
 		"gf_length_mm": spec.length_mm,
 		"gf_width_mm": spec.width_mm,
+		"sheet_area_m2": spec.area_m2,
+		"area_uom": get_area_uom(),
+		"stock_uom": _settings_value("default_uom") or "Nos",
 	}
+
+
+def ensure_item_uom_conversion(item_code: str, uom: str, conversion_factor: float) -> bool:
+	"""Idempotently ensure an Item has a UOM Conversion Detail row for `uom`.
+
+	Mirrors the Item form's "Build Raw Sheet Item Code" dialog logic so that a raw sheet
+	Item can carry a selling Item Price priced per Square Meter (ERPNext requires the UOM
+	used on an Item Price to already exist in the Item's UOM table). Never appends a
+	duplicate row for the same UOM; updates the existing row's factor if it changed.
+
+	Returns True if the Item was updated.
+	"""
+	if not item_code or not uom or not conversion_factor:
+		return False
+
+	item = frappe.get_doc("Item", item_code)
+	if (item.stock_uom or "").strip() == uom:
+		return False
+
+	for row in item.get("uoms") or []:
+		if row.uom == uom:
+			if flt(row.conversion_factor) == flt(conversion_factor):
+				return False
+			row.conversion_factor = conversion_factor
+			item.save(ignore_permissions=True)
+			return True
+
+	item.append("uoms", {"uom": uom, "conversion_factor": conversion_factor})
+	item.save(ignore_permissions=True)
+	return True
 
 
 @frappe.whitelist()

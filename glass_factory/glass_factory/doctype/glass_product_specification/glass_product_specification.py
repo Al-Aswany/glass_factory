@@ -19,8 +19,8 @@ from glass_factory.glass_factory.spec_pricing import (
     calculate_raw_cost,
     calculate_spec_pricing,
     collect_pricing_warnings,
+    fetch_raw_selling_rate_per_m2,
     fetch_raw_sheet_rate,
-    fetch_raw_sheet_selling_rate,
     get_spec_currency,
     pricing_result,
 )
@@ -92,10 +92,10 @@ class GlassProductSpecification(Document):
             self.raw_sheet_rate_per_piece = rate
         return rate
 
-    def fetch_raw_sheet_selling_rate(self):
-        rate = fetch_raw_sheet_selling_rate(self)
+    def fetch_raw_selling_rate_per_m2(self, *, throw_if_missing: bool = False):
+        rate = fetch_raw_selling_rate_per_m2(self, throw_if_missing=throw_if_missing)
         if rate > 0:
-            self.raw_sheet_selling_rate_per_piece = rate
+            self.raw_selling_rate_per_m2 = rate
         return rate
 
     def calculate_area(self):
@@ -112,6 +112,7 @@ class GlassProductSpecification(Document):
             self.raw_sheet_length_mm = 0
             self.raw_sheet_width_mm = 0
             self.raw_sheet_area_m2 = 0
+            self.raw_selling_rate_per_m2 = 0
             return
 
         meta = get_item_glass_meta(self.raw_sheet_item)
@@ -140,9 +141,12 @@ class GlassProductSpecification(Document):
         if rate > 0:
             self.raw_sheet_rate_per_piece = rate
 
-        selling_rate = fetch_raw_sheet_selling_rate(self)
+        # Selling is priced per m² directly from Item Price (UOM = Square Meter).
+        # No fallback to a per-sheet selling price; leave 0 here and let
+        # refresh_pricing() raise a clear error when it is required.
+        selling_rate = fetch_raw_selling_rate_per_m2(self)
         if selling_rate > 0:
-            self.raw_sheet_selling_rate_per_piece = selling_rate
+            self.raw_selling_rate_per_m2 = selling_rate
 
     def validate_counts(self):
         for fieldname in ("hole_count", "special_hole_count", "slot_count", "special_slot_count"):
@@ -262,7 +266,7 @@ class GlassProductSpecification(Document):
             "raw_sheet_width_mm": self.get("raw_sheet_width_mm"),
             "raw_sheet_area_m2": self.get("raw_sheet_area_m2"),
             "raw_sheet_rate_per_piece": flt(self.get("raw_sheet_rate_per_piece")),
-            "raw_sheet_selling_rate_per_piece": flt(self.get("raw_sheet_selling_rate_per_piece")),
+            "raw_selling_rate_per_m2": flt(self.get("raw_selling_rate_per_m2")),
             "item_code_preview": self.get("item_code_preview"),
             "operation_code_preview": self.get("operation_code_preview"),
             "technical_summary": self.get("technical_summary"),
@@ -272,7 +276,12 @@ class GlassProductSpecification(Document):
 
     @frappe.whitelist()
     def refresh_pricing(self):
-        """Fetch prices, rebuild operation pricing rows, recalculate, and save."""
+        """Fetch prices, rebuild operation pricing rows, recalculate, and save.
+
+        Raw selling is strict: a selling Item Price for the raw sheet item with UOM
+        Square Meter is required. There is no fallback to a per-sheet selling price;
+        if none is found, this raises a clear validation error instead of saving.
+        """
         self.pull_from_raw_sheet_item()
         self._validate_glass_dimensions()
         self.calculate_area()
@@ -280,9 +289,8 @@ class GlassProductSpecification(Document):
         if flt(self.raw_sheet_rate_per_piece) <= 0:
             self.fetch_raw_sheet_rate(fetch_from_item_price=True)
 
-        selling_rate = fetch_raw_sheet_selling_rate(self)
-        if selling_rate > 0:
-            self.raw_sheet_selling_rate_per_piece = selling_rate
+        if flt(self.raw_selling_rate_per_m2) <= 0:
+            self.fetch_raw_selling_rate_per_m2(throw_if_missing=True)
 
         build_operation_pricing_rows(self)
         self.calculate_pricing()

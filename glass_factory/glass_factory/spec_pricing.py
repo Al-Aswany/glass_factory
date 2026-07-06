@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint, flt
 
@@ -11,6 +12,7 @@ from glass_factory.glass_factory.piece_pricing import (
     chargeable_area_m2,
     get_buying_price_list,
     get_item_buying_rate,
+    get_raw_glass_selling_rate_per_m2,
 )
 
 AREA_OPERATIONS = frozenset({"Temper", "Sandblast", "Laminate"})
@@ -132,57 +134,68 @@ def fetch_raw_sheet_rate(spec, *, fetch_from_item_price: bool = False) -> float:
     return flt(rate)
 
 
-def fetch_raw_sheet_selling_rate(spec) -> float:
-    """Fetch raw sheet selling price per piece from Item Price records (selling=1).
+def _resolve_selling_price_list(spec) -> str | None:
+    """Resolve which selling Price List to use for the raw sheet Item Price lookup.
 
-    Raw sheet items may have selling Item Price records used for pricing only.
-    They are not sold directly on Quotation/Sales Order.
+    Priority: the spec's own Selling Price List, then Settings default_selling_price_list.
+    """
+    price_list = spec.get("price_list")
+    if price_list:
+        return price_list
 
-    Lookup priority:
-    1. Spec's own price_list
-    2. Settings default_selling_price_list
-    3. Any selling Item Price matching the spec currency
+    if frappe.db.exists("DocType", "Glass Factory Settings"):
+        return (
+            frappe.db.get_single_value("Glass Factory Settings", "default_selling_price_list")
+            or None
+        )
+    return None
+
+
+def fetch_raw_selling_rate_per_m2(spec, *, throw_if_missing: bool = False) -> float:
+    """Fetch the raw sheet selling rate per m² directly from a selling Item Price.
+
+    The lookup is strict:
+    - selling = 1
+    - item_code = raw sheet item
+    - price_list = spec's selling price list (falls back to Settings default)
+    - uom = Square Meter (the app's configured area UOM)
+    - currency = spec currency, when the spec has one
+
+    There is intentionally NO fallback to a per-sheet selling price: raw glass selling
+    must be priced per m² using a dedicated Item Price record, even though raw glass
+    buying is still priced per full sheet.
     """
     if not spec.get("raw_sheet_item"):
         return 0
 
+    price_list = _resolve_selling_price_list(spec)
     currency = get_spec_currency(spec)
 
-    # 1. Spec's own selling price list
-    price_list = spec.get("price_list")
-    if price_list:
-        rate = frappe.db.get_value(
-            "Item Price",
-            {"item_code": spec.raw_sheet_item, "price_list": price_list, "selling": 1},
-            "price_list_rate",
-            order_by="valid_from desc, creation desc",
-        )
-        if rate:
-            return flt(rate)
-
-    # 2. Settings default selling price list
-    if frappe.db.exists("DocType", "Glass Factory Settings"):
-        settings_pl = frappe.db.get_single_value(
-            "Glass Factory Settings", "default_selling_price_list"
-        )
-        if settings_pl and settings_pl != price_list:
-            rate = frappe.db.get_value(
-                "Item Price",
-                {"item_code": spec.raw_sheet_item, "price_list": settings_pl, "selling": 1},
-                "price_list_rate",
-                order_by="valid_from desc, creation desc",
-            )
-            if rate:
-                return flt(rate)
-
-    # 3. Any selling Item Price in spec currency
-    rate = frappe.db.get_value(
-        "Item Price",
-        {"item_code": spec.raw_sheet_item, "selling": 1, "currency": currency},
-        "price_list_rate",
-        order_by="valid_from desc, creation desc",
+    rate = get_raw_glass_selling_rate_per_m2(
+        spec.raw_sheet_item,
+        price_list,
+        currency=currency,
     )
-    return flt(rate) if rate else 0
+    if rate > 0:
+        return rate
+
+    if throw_if_missing:
+        from glass_factory.glass_factory.settings_validation import get_area_uom
+
+        area_uom = get_area_uom()
+        price_list_label = price_list or _("the configured selling price list")
+        frappe.throw(
+            _(
+                "Missing selling Item Price for {0} in {1} with UOM {2}. "
+                "Please add a selling price per m²."
+            ).format(
+                frappe.bold(spec.raw_sheet_item),
+                frappe.bold(price_list_label),
+                area_uom,
+            )
+        )
+
+    return 0
 
 
 def build_operation_pricing_rows(spec, *, reset_overrides: bool = False) -> None:
@@ -299,18 +312,17 @@ def calculate_raw_cost(spec) -> None:
 
 
 def calculate_raw_selling_price(spec) -> None:
-    """Compute raw selling price fields from raw_sheet_selling_rate_per_piece."""
-    selling_rate = flt(spec.get("raw_sheet_selling_rate_per_piece"))
-    raw_area = flt(spec.get("raw_sheet_area_m2"))
+    """Compute the raw selling amount from the already-fetched per-m² selling rate.
+
+    raw_selling_rate_per_m2 must come directly from a selling Item Price with UOM
+    Square Meter (see fetch_raw_selling_rate_per_m2). It is intentionally NOT derived
+    by dividing a per-sheet selling price by the raw sheet area anymore.
+    """
+    selling_rate_per_m2 = flt(spec.get("raw_selling_rate_per_m2"))
     area_m2 = flt(spec.get("area_m2"))
 
-    if raw_area > 0 and selling_rate > 0:
-        spec.raw_selling_rate_per_m2 = flt(selling_rate / raw_area, 6)
-    else:
-        spec.raw_selling_rate_per_m2 = 0
-
     spec.raw_selling_amount_per_finished_piece = (
-        flt(spec.raw_selling_rate_per_m2 * area_m2, 6) if area_m2 > 0 else 0
+        flt(selling_rate_per_m2 * area_m2, 6) if area_m2 > 0 and selling_rate_per_m2 > 0 else 0
     )
 
 
@@ -459,9 +471,9 @@ def collect_pricing_warnings(spec) -> list[str]:
             "Warning: Raw buying cost is missing. Profit calculation may be wrong."
         )
 
-    if flt(spec.get("raw_sheet_selling_rate_per_piece")) <= 0:
+    if flt(spec.get("raw_selling_rate_per_m2")) <= 0:
         warnings.append(
-            "Warning: Raw selling price is missing. Customer material price is incomplete."
+            "Warning: Raw selling price per m² is missing. Customer material price is incomplete."
         )
 
     zero_rate_ops = [

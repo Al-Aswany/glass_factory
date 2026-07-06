@@ -25,4 +25,5 @@ glass_factory.patches.v0_0.setup_spec_pricing_ux_phase
 glass_factory.patches.v0_0.setup_clean_glass_factory_settings
 glass_factory.patches.v0_0.cleanup_legacy_glass_pieces_and_pricing
 glass_factory.patches.v0_0.fix_missing_spec_custom_fields
+glass_factory.patches.v0_0.setup_raw_glass_selling_per_m2
 # Patches added in this section will be executed after doctypes are migrated

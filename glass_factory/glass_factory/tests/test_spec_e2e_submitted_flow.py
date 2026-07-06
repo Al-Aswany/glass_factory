@@ -145,6 +145,15 @@ def _ensure_raw_item(item_code: str, item_group: str,
     item.append("item_defaults", {"company": company, "default_warehouse": warehouse})
     item.insert(ignore_permissions=True)
 
+    # ERPNext requires the Item Price UOM to already exist on the Item's UOM table,
+    # so a selling Item Price priced per Square Meter needs this conversion row.
+    from glass_factory.glass_factory.item_resolver import ensure_item_uom_conversion
+    from glass_factory.glass_factory.settings_validation import get_area_uom
+
+    area_m2 = (flt(item.gf_length_mm) * flt(item.gf_width_mm)) / 1_000_000
+    if area_m2 > 0:
+        ensure_item_uom_conversion(item_code, get_area_uom(), flt(1 / area_m2, 6))
+
 
 def _ensure_scrap_item(item_code: str, item_group: str) -> None:
     if _ex("Item", item_code):
@@ -162,12 +171,12 @@ def _ensure_scrap_item(item_code: str, item_group: str) -> None:
 
 
 def _ensure_item_price(item_code: str, price_list: str, rate: float,
-                       currency: str, *, buying: bool, selling: bool) -> str:
-    existing = frappe.db.get_value(
-        "Item Price",
-        {"item_code": item_code, "price_list": price_list},
-        "name",
-    )
+                       currency: str, *, buying: bool, selling: bool,
+                       uom: str | None = None) -> str:
+    filters = {"item_code": item_code, "price_list": price_list}
+    if uom:
+        filters["uom"] = uom
+    existing = frappe.db.get_value("Item Price", filters, "name")
     if existing:
         return existing
     ip = frappe.new_doc("Item Price")
@@ -177,6 +186,8 @@ def _ensure_item_price(item_code: str, price_list: str, rate: float,
     ip.currency         = currency
     ip.buying           = 1 if buying  else 0
     ip.selling          = 1 if selling else 0
+    if uom:
+        ip.uom = uom
     ip.insert(ignore_permissions=True)
     return ip.name
 
@@ -275,11 +286,14 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
         _ensure_raw_item(_RAW_ITEM, f"{_PFX} Raw", cls.company, cls.raw_wh)
         cls._reg("Item", _RAW_ITEM)
 
-        # Item prices – buying (500) and selling (800)
+        # Item prices – buying is per full sheet (500), selling is per m² (120), which
+        # mirrors the real business rule: raw glass is bought by the sheet but sold per m².
+        from glass_factory.glass_factory.settings_validation import get_area_uom
+
         ip_b = _ensure_item_price(_RAW_ITEM, cls.buying_pl,  500, cls.currency,
                                   buying=True,  selling=False)
-        ip_s = _ensure_item_price(_RAW_ITEM, cls.selling_pl, 800, cls.currency,
-                                  buying=False, selling=True)
+        ip_s = _ensure_item_price(_RAW_ITEM, cls.selling_pl, 120, cls.currency,
+                                  buying=False, selling=True, uom=get_area_uom())
         cls._reg("Item Price", ip_b)
         cls._reg("Item Price", ip_s)
 
@@ -458,8 +472,8 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
             msg="total area must be 0.96 × 2 = 1.92 m²")
         self.assertGreater(flt(spec.raw_sheet_rate_per_piece), 0,
             "raw_sheet_rate_per_piece should be populated from the buying Item Price")
-        self.assertGreater(flt(spec.raw_sheet_selling_rate_per_piece), 0,
-            "raw_sheet_selling_rate_per_piece should be populated from the selling Item Price")
+        self.assertGreater(flt(spec.raw_selling_rate_per_m2), 0,
+            "raw_selling_rate_per_m2 should be populated directly from the selling Item Price (UOM Square Meter)")
         self.assertTrue(spec.operation_pricing,
             "operation_pricing child table must have rows after save")
         self.assertGreater(flt(spec.processing_amount_per_piece), 0,

@@ -28,7 +28,7 @@ def _pricing_spec(**overrides):
 		"width_mm": 800,
 		"raw_sheet_item": RAW_SHEET_ITEM,
 		"raw_sheet_rate_per_piece": 100,
-		"raw_sheet_selling_rate_per_piece": 0,
+		"raw_selling_rate_per_m2": 0,
 		"currency": "USD",
 		"qty": 1,
 	}
@@ -139,9 +139,9 @@ class TestGlassProductSpecificationPricingCalculations(unittest.TestCase):
 
 	def test_calculated_amount_per_piece_includes_raw_selling_and_processing(self):
 		# calculated_amount uses raw_selling (not raw_cost) + processing.
-		# With raw_sheet_selling_rate_per_piece set, raw_selling > 0.
+		# With raw_selling_rate_per_m2 set, raw_selling > 0.
 		spec = _pricing_spec(
-			polish=1, temper=1, hole_count=2, raw_sheet_selling_rate_per_piece=100
+			polish=1, temper=1, hole_count=2, raw_selling_rate_per_m2=100
 		)
 		calculate_spec_pricing(spec)
 		expected = flt(
@@ -151,7 +151,7 @@ class TestGlassProductSpecificationPricingCalculations(unittest.TestCase):
 
 	def test_calculated_amount_per_piece_falls_back_to_raw_cost_when_no_selling_price(self):
 		# When no selling price is set, calculated_amount falls back to raw_cost + processing.
-		spec = _pricing_spec(polish=1, temper=1, raw_sheet_selling_rate_per_piece=0)
+		spec = _pricing_spec(polish=1, temper=1, raw_selling_rate_per_m2=0)
 		calculate_spec_pricing(spec)
 		self.assertEqual(spec.raw_selling_amount_per_finished_piece, 0)
 		expected = flt(spec.raw_cost_per_finished_piece + spec.processing_amount_per_piece, 2)
@@ -204,6 +204,9 @@ class TestGlassProductSpecificationPricingCalculations(unittest.TestCase):
 		self.assertIn("Raw sheet dimensions are required", str(ctx.exception))
 
 
+TEST_SELLING_PRICE_LIST = "GF-Test-Selling-PerM2"
+
+
 class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls):
@@ -218,6 +221,53 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 			fields=["*"],
 		)
 		_set_operation_rates(_usd_rates())
+		cls._ensure_per_m2_selling_price()
+
+	@classmethod
+	def _ensure_per_m2_selling_price(cls):
+		from glass_factory.glass_factory.item_resolver import ensure_item_uom_conversion
+		from glass_factory.glass_factory.settings_validation import get_area_uom
+
+		# ERPNext requires the Item Price UOM to already exist on the Item's UOM table.
+		length_mm, width_mm = frappe.db.get_value(
+			"Item", RAW_SHEET_ITEM, ["gf_length_mm", "gf_width_mm"]
+		)
+		area_m2 = flt((flt(length_mm) * flt(width_mm)) / 1_000_000, 6)
+		if area_m2 > 0:
+			ensure_item_uom_conversion(RAW_SHEET_ITEM, get_area_uom(), flt(1 / area_m2, 6))
+
+		if not frappe.db.exists("Price List", TEST_SELLING_PRICE_LIST):
+			price_list = frappe.new_doc("Price List")
+			price_list.price_list_name = TEST_SELLING_PRICE_LIST
+			price_list.selling = 1
+			price_list.currency = "USD"
+			price_list.enabled = 1
+			price_list.insert(ignore_permissions=True)
+
+		area_uom = get_area_uom()
+		existing = frappe.db.get_value(
+			"Item Price",
+			{
+				"item_code": RAW_SHEET_ITEM,
+				"price_list": TEST_SELLING_PRICE_LIST,
+				"selling": 1,
+				"uom": area_uom,
+			},
+			"name",
+		)
+		if existing:
+			cls._created_item_price = None
+			return
+
+		item_price = frappe.new_doc("Item Price")
+		item_price.item_code = RAW_SHEET_ITEM
+		item_price.price_list = TEST_SELLING_PRICE_LIST
+		item_price.selling = 1
+		item_price.currency = "USD"
+		item_price.uom = area_uom
+		item_price.price_list_rate = 120
+		item_price.insert(ignore_permissions=True)
+		cls._created_item_price = item_price.name
 
 	@classmethod
 	def tearDownClass(cls):
@@ -226,6 +276,8 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 		for row in cls._previous_rates:
 			settings.append("operation_rates", row)
 		settings.save(ignore_permissions=True)
+		if getattr(cls, "_created_item_price", None):
+			frappe.delete_doc("Item Price", cls._created_item_price, force=True, ignore_permissions=True)
 		frappe.db.commit()
 		super().tearDownClass()
 
@@ -247,14 +299,43 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 		doc = _new_spec(
 			raw_sheet_item=RAW_SHEET_ITEM,
 			currency="USD",
+			price_list=TEST_SELLING_PRICE_LIST,
 			polish=1,
 		)
 		doc.insert()
 		result = doc.refresh_pricing()
 		self.assertIn("raw_cost_per_m2", result)
 		self.assertIn("selling_rate_per_m2", result)
+		self.assertGreater(flt(result.get("raw_selling_rate_per_m2")), 0)
 		doc.reload()
 		self.assertGreaterEqual(flt(doc.edge_meter), 0)
+		doc.delete()
+		frappe.db.commit()
+
+	def test_refresh_pricing_raises_clear_error_when_selling_price_missing(self):
+		missing_price_list = "GF-Test-Selling-PerM2-Missing"
+		if not frappe.db.exists("Price List", missing_price_list):
+			price_list = frappe.new_doc("Price List")
+			price_list.price_list_name = missing_price_list
+			price_list.selling = 1
+			price_list.currency = "USD"
+			price_list.enabled = 1
+			price_list.insert(ignore_permissions=True)
+			self.addCleanup(
+				lambda: frappe.delete_doc(
+					"Price List", missing_price_list, force=True, ignore_permissions=True
+				)
+			)
+
+		doc = _new_spec(
+			raw_sheet_item=RAW_SHEET_ITEM,
+			currency="USD",
+			price_list=missing_price_list,
+		)
+		doc.insert()
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			doc.refresh_pricing()
+		self.assertIn("Missing selling Item Price", str(ctx.exception))
 		doc.delete()
 		frappe.db.commit()
 

@@ -18,7 +18,7 @@ from glass_factory.glass_factory.spec_pricing import (
     calculate_raw_selling_price,
     calculate_spec_pricing,
     collect_pricing_warnings,
-    fetch_raw_sheet_selling_rate,
+    fetch_raw_selling_rate_per_m2,
     get_spec_currency,
 )
 
@@ -38,7 +38,7 @@ def _make_spec(**overrides):
         "width_mm": 800,
         "raw_sheet_item": RAW_SHEET_ITEM,
         "raw_sheet_rate_per_piece": 100,
-        "raw_sheet_selling_rate_per_piece": 0,
+        "raw_selling_rate_per_m2": 0,
         "raw_sheet_length_mm": 3210,
         "raw_sheet_width_mm": 2250,
         "raw_sheet_area_m2": RAW_SHEET_AREA,
@@ -89,6 +89,68 @@ def _usd_rates():
     ]
 
 
+PRICING_UX_SELLING_PRICE_LIST = "GF-PricingUX-Selling-PerM2"
+
+
+def _setup_per_m2_selling_price(price_list=PRICING_UX_SELLING_PRICE_LIST, rate=120, currency="USD"):
+    """Ensure a selling Item Price (UOM = Square Meter) exists for RAW_SHEET_ITEM and make
+    it the Glass Factory Settings default selling price list for the duration of a test class.
+
+    Returns a dict with enough state for the matching _teardown_per_m2_selling_price call.
+    """
+    from glass_factory.glass_factory.item_resolver import ensure_item_uom_conversion
+    from glass_factory.glass_factory.settings_validation import get_area_uom
+
+    if not frappe.db.exists("Price List", price_list):
+        pl = frappe.new_doc("Price List")
+        pl.price_list_name = price_list
+        pl.selling = 1
+        pl.currency = currency
+        pl.enabled = 1
+        pl.insert(ignore_permissions=True)
+
+    area_uom = get_area_uom()
+    # ERPNext requires the Item Price UOM to already exist on the Item's UOM table.
+    if RAW_SHEET_AREA > 0:
+        ensure_item_uom_conversion(RAW_SHEET_ITEM, area_uom, flt(1 / RAW_SHEET_AREA, 6))
+
+    created_item_price = None
+    existing = frappe.db.get_value(
+        "Item Price",
+        {"item_code": RAW_SHEET_ITEM, "price_list": price_list, "selling": 1, "uom": area_uom},
+        "name",
+    )
+    if not existing:
+        ip = frappe.new_doc("Item Price")
+        ip.item_code = RAW_SHEET_ITEM
+        ip.price_list = price_list
+        ip.selling = 1
+        ip.currency = currency
+        ip.uom = area_uom
+        ip.price_list_rate = rate
+        ip.insert(ignore_permissions=True)
+        created_item_price = ip.name
+
+    previous_default_pl = frappe.db.get_single_value(
+        "Glass Factory Settings", "default_selling_price_list"
+    )
+    frappe.db.set_single_value("Glass Factory Settings", "default_selling_price_list", price_list)
+    frappe.db.commit()
+
+    return {"created_item_price": created_item_price, "previous_default_pl": previous_default_pl}
+
+
+def _teardown_per_m2_selling_price(state):
+    frappe.db.set_single_value(
+        "Glass Factory Settings", "default_selling_price_list", state.get("previous_default_pl")
+    )
+    if state.get("created_item_price"):
+        frappe.delete_doc(
+            "Item Price", state["created_item_price"], force=True, ignore_permissions=True
+        )
+    frappe.db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Raw buying / selling split — unit tests
 # ---------------------------------------------------------------------------
@@ -111,14 +173,13 @@ class TestRawBuyingSellingSplitUnit(unittest.TestCase):
         )
 
     def test_selling_rate_populates_raw_selling_fields(self):
-        """Test 2: selling rate → raw_selling_rate_per_m2 and raw_selling_amount_per_finished_piece."""
-        spec = _make_spec(raw_sheet_selling_rate_per_piece=120)
+        """Test 2: raw_selling_rate_per_m2 (fetched directly, not derived) → raw_selling_amount."""
+        spec = _make_spec(raw_selling_rate_per_m2=120)
         calculate_raw_selling_price(spec)
-        expected_selling_m2 = flt(120 / RAW_SHEET_AREA, 6)
-        self.assertAlmostEqual(spec.raw_selling_rate_per_m2, expected_selling_m2, places=4)
+        self.assertEqual(spec.raw_selling_rate_per_m2, 120)
         self.assertAlmostEqual(
             spec.raw_selling_amount_per_finished_piece,
-            flt(expected_selling_m2 * FINISHED_AREA, 6),
+            flt(120 * FINISHED_AREA, 6),
             places=4,
         )
 
@@ -126,7 +187,7 @@ class TestRawBuyingSellingSplitUnit(unittest.TestCase):
         """Test 3: calculated_amount_per_piece = raw_selling + processing, not raw_cost."""
         spec = _make_spec(
             raw_sheet_rate_per_piece=100,
-            raw_sheet_selling_rate_per_piece=150,
+            raw_selling_rate_per_m2=20,
         )
         calculate_spec_pricing(spec)
         # raw selling amount != raw cost amount since rates differ
@@ -144,14 +205,14 @@ class TestRawBuyingSellingSplitUnit(unittest.TestCase):
 
     def test_raw_selling_zero_sets_raw_selling_fields_to_zero(self):
         """Missing selling price → raw_selling_rate_per_m2 and raw_selling_amount = 0."""
-        spec = _make_spec(raw_sheet_selling_rate_per_piece=0)
+        spec = _make_spec(raw_selling_rate_per_m2=0)
         calculate_raw_selling_price(spec)
         self.assertEqual(spec.raw_selling_amount_per_finished_piece, 0)
         self.assertEqual(spec.raw_selling_rate_per_m2, 0)
 
     def test_missing_selling_price_produces_warning_not_crash(self):
         """Test 5: Missing selling price produces warning but does not raise."""
-        spec = _make_spec(raw_sheet_selling_rate_per_piece=0)
+        spec = _make_spec(raw_selling_rate_per_m2=0)
         # Should not raise
         calculate_spec_pricing(spec)
         warnings = collect_pricing_warnings(spec)
@@ -336,7 +397,7 @@ class TestFinalPricingFormulas(unittest.TestCase):
 
     def test_calculated_amount_is_raw_selling_plus_processing_when_selling_set(self):
         """Test 15: calculated_amount_per_piece = raw_selling + processing when selling price > 0."""
-        spec = _make_spec(raw_sheet_selling_rate_per_piece=120, temper=1)
+        spec = _make_spec(raw_selling_rate_per_m2=120, temper=1)
         calculate_spec_pricing(spec)
         self.assertGreater(flt(spec.raw_selling_amount_per_finished_piece), 0)
         expected = flt(
@@ -346,7 +407,7 @@ class TestFinalPricingFormulas(unittest.TestCase):
 
     def test_calculated_amount_falls_back_to_raw_cost_when_no_selling_price(self):
         """When selling price = 0, calculated_amount falls back to raw_cost + processing."""
-        spec = _make_spec(raw_sheet_rate_per_piece=100, raw_sheet_selling_rate_per_piece=0)
+        spec = _make_spec(raw_sheet_rate_per_piece=100, raw_selling_rate_per_m2=0)
         calculate_spec_pricing(spec)
         expected = flt(
             spec.raw_cost_per_finished_piece + spec.processing_amount_per_piece, 2
@@ -355,7 +416,7 @@ class TestFinalPricingFormulas(unittest.TestCase):
 
     def test_calculated_rate_per_m2_equals_amount_over_area(self):
         """Test 16: calculated_rate_per_m2 = calculated_amount / area_m2."""
-        spec = _make_spec(raw_sheet_selling_rate_per_piece=120)
+        spec = _make_spec(raw_selling_rate_per_m2=120)
         calculate_spec_pricing(spec)
         expected = flt(spec.calculated_amount_per_piece / spec.area_m2, 6)
         self.assertAlmostEqual(spec.calculated_rate_per_m2, expected, places=5)
@@ -383,7 +444,7 @@ class TestFinalPricingFormulas(unittest.TestCase):
 
     def test_profit_fields_calculate_safely_with_zero_rate(self):
         """Test 20: Profit fields handle zero rate without division errors."""
-        spec = _make_spec(manual_selling_rate_per_m2=0, raw_sheet_selling_rate_per_piece=0)
+        spec = _make_spec(manual_selling_rate_per_m2=0, raw_selling_rate_per_m2=0)
         calculate_spec_pricing(spec)
         # Should not raise
         self.assertEqual(spec.gross_profit_percent, 0)
@@ -392,7 +453,7 @@ class TestFinalPricingFormulas(unittest.TestCase):
         """Gross profit = rate_per_piece - estimated_cost."""
         spec = _make_spec(
             raw_sheet_rate_per_piece=100,
-            raw_sheet_selling_rate_per_piece=120,
+            raw_selling_rate_per_m2=120,
             manual_selling_rate_per_m2=25,
         )
         calculate_spec_pricing(spec)
@@ -405,7 +466,7 @@ class TestFinalPricingFormulas(unittest.TestCase):
     def test_total_gross_profit_scales_with_qty(self):
         """total_gross_profit = gross_profit_per_piece × qty."""
         spec = _make_spec(
-            raw_sheet_selling_rate_per_piece=120,
+            raw_selling_rate_per_m2=120,
             manual_selling_rate_per_m2=25,
             qty=5,
         )
@@ -421,12 +482,12 @@ class TestFinalPricingFormulas(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# fetch_raw_sheet_selling_rate — integration tests
+# fetch_raw_selling_rate_per_m2 — integration tests
 # ---------------------------------------------------------------------------
 
 
 class TestFetchRawSheetSellingRate(IntegrationTestCase):
-    """Integration tests for fetching selling rates from Item Price."""
+    """Integration tests for fetching the per-m² selling rate from Item Price."""
 
     @classmethod
     def setUpClass(cls):
@@ -443,14 +504,14 @@ class TestFetchRawSheetSellingRate(IntegrationTestCase):
             company=None,
         )
         with patch(
-            "glass_factory.glass_factory.spec_pricing.frappe.db.get_value",
+            "glass_factory.glass_factory.piece_pricing.frappe.db.get_value",
             return_value=None,
         ):
-            rate = fetch_raw_sheet_selling_rate(spec)
+            rate = fetch_raw_selling_rate_per_m2(spec)
         self.assertEqual(rate, 0)
 
-    def test_selling_rate_fetched_from_price_list(self):
-        """Test 2 (integration): Selling Item Price in spec price_list is fetched."""
+    def test_missing_selling_price_throws_when_required(self):
+        """refresh_pricing()-style strict lookup raises a clear error when nothing is found."""
         spec = frappe._dict(
             raw_sheet_item=RAW_SHEET_ITEM,
             currency="USD",
@@ -458,10 +519,26 @@ class TestFetchRawSheetSellingRate(IntegrationTestCase):
             company=None,
         )
         with patch(
-            "glass_factory.glass_factory.spec_pricing.frappe.db.get_value",
+            "glass_factory.glass_factory.piece_pricing.frappe.db.get_value",
+            return_value=None,
+        ):
+            with self.assertRaises(frappe.ValidationError) as ctx:
+                fetch_raw_selling_rate_per_m2(spec, throw_if_missing=True)
+        self.assertIn("Missing selling Item Price", str(ctx.exception))
+
+    def test_selling_rate_fetched_from_price_list(self):
+        """Test 2 (integration): Selling Item Price (UOM = Square Meter) in spec price_list is fetched."""
+        spec = frappe._dict(
+            raw_sheet_item=RAW_SHEET_ITEM,
+            currency="USD",
+            price_list="Standard Selling",
+            company=None,
+        )
+        with patch(
+            "glass_factory.glass_factory.piece_pricing.frappe.db.get_value",
             return_value=250,
         ):
-            rate = fetch_raw_sheet_selling_rate(spec)
+            rate = fetch_raw_selling_rate_per_m2(spec)
         self.assertEqual(rate, 250)
 
     def test_raw_sheet_item_remains_non_sales_item(self):
@@ -493,6 +570,7 @@ class TestRefreshPricingIntegration(IntegrationTestCase):
             fields=["*"],
         )
         _set_operation_rates(_usd_rates())
+        cls._selling_price_state = _setup_per_m2_selling_price()
 
     @classmethod
     def tearDownClass(cls):
@@ -501,6 +579,7 @@ class TestRefreshPricingIntegration(IntegrationTestCase):
         for row in cls._previous_rates:
             settings.append("operation_rates", row)
         settings.save(ignore_permissions=True)
+        _teardown_per_m2_selling_price(cls._selling_price_state)
         frappe.db.commit()
         super().tearDownClass()
 
@@ -686,7 +765,7 @@ class TestCompatibilitySpec(IntegrationTestCase):
         )
         doc = _insert_full_spec()
         doc.raw_sheet_rate_per_piece = 100
-        doc.raw_sheet_selling_rate_per_piece = 120
+        doc.raw_selling_rate_per_m2 = 120
         doc.manual_selling_rate_per_m2 = 25
         doc.currency = "USD"
         doc.save()
