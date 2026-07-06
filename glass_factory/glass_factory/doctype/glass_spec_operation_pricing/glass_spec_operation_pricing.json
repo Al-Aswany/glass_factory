@@ -92,8 +92,7 @@
    "fieldname": "is_overridden",
    "fieldtype": "Check",
    "in_list_view": 1,
-   "label": "Override",
-   "read_only": 1
+   "label": "Override"
   },
   {
    "fieldname": "source",

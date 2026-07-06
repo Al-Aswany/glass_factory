@@ -25,6 +25,17 @@ def _new_spec(**overrides):
 	return doc
 
 
+def _refresh_pricing_context(**overrides):
+	"""Common header fields required by production refresh_pricing validation."""
+	values = {
+		"company": frappe.db.get_value("Company", {"is_group": 0}, "name"),
+		"customer": frappe.db.get_value("Customer", {}, "name"),
+		"currency": "USD",
+	}
+	values.update(overrides)
+	return values
+
+
 class TestBuildGlassItemCode(unittest.TestCase):
 	def test_item_code_without_operations(self):
 		self.assertEqual(

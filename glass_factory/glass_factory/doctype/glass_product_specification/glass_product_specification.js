@@ -57,6 +57,7 @@ const GF_SPEC_PRICING_RESULT_FIELDS = [
 	"gross_profit_per_m2",
 	"gross_profit_percent",
 	"total_gross_profit",
+	"status",
 ];
 
 const GF_SPEC_RAW_SHEET_FIELDS = [
@@ -69,64 +70,24 @@ const GF_SPEC_RAW_SHEET_FIELDS = [
 	"raw_sheet_selling_rate_per_piece",
 ];
 
+const GF_SPEC_STATUS_COLORS = {
+	Draft: "gray",
+	Priced: "orange",
+	Ready: "blue",
+	"Items Generated": "purple",
+	Used: "green",
+	Submitted: "darkgrey",
+	Cancelled: "red",
+};
+
+const GF_SPEC_PRICING_REFRESHED_STATUSES = new Set(["Priced", "Ready", "Items Generated", "Used", "Submitted"]);
+
 frappe.ui.form.on("Glass Product Specification", {
 	refresh(frm) {
-		const color_map = {
-			Draft: "gray",
-			Ready: "blue",
-			Used: "green",
-			Cancelled: "red",
-		};
-		frm.page.set_indicator(frm.doc.status, color_map[frm.doc.status] || "gray");
-
-		if (!frm.is_new()) {
-			frm.add_custom_button(__("Refresh Pricing"), () => {
-				gf_refresh_spec_pricing(frm);
-			});
-
-			frm.add_custom_button(__("Refresh Operation Rates"), () => {
-				gf_refresh_operation_rates(frm);
-			}, __("Pricing"));
-
-			frm.add_custom_button(__("Reset Operation Rates to Settings"), () => {
-				frappe.confirm(
-					__("Reset all operation rates to settings defaults? Manual overrides will be lost."),
-					() => gf_reset_operation_rates(frm)
-				);
-			}, __("Pricing"));
-
-			if (!frm.doc.items_generated) {
-				frm.add_custom_button(__("Generate Items"), () => {
-					gf_generate_spec_items(frm);
-				});
-			}
-
-			if (frm.doc.generation_status === "Regeneration Required") {
-				frm.add_custom_button(__("Regenerate Items"), () => {
-					gf_generate_spec_items(frm);
-				});
-			}
-
-			if (frm.doc.items_generated) {
-				frm.add_custom_button(__("Reset Generated Links"), () => {
-					gf_reset_spec_generated_items(frm);
-				});
-			}
-
-			if (glass_factory.sync.spec_transaction_buttons_visible(frm)) {
-				frm.add_custom_button(__("Add to Quotation"), () => {
-					glass_factory.sync.show_add_spec_from_spec_dialog(frm, "Quotation");
-				}, __("Create"));
-
-				frm.add_custom_button(__("Add to Sales Order"), () => {
-					glass_factory.sync.show_add_spec_from_spec_dialog(frm, "Sales Order");
-				}, __("Create"));
-			}
-		}
-
-		frm.add_custom_button(__("Refresh Preview"), () => {
-			gf_refresh_spec_preview(frm);
-		});
+		gf_set_spec_status_indicator(frm);
+		gf_apply_spec_form_locks(frm);
+		gf_setup_spec_operation_pricing_grid(frm);
+		gf_setup_spec_custom_buttons(frm);
 
 		frm.set_query("raw_sheet_item", () => ({
 			filters: {
@@ -148,6 +109,9 @@ frappe.ui.form.on("Glass Product Specification", {
 
 GF_SPEC_PREVIEW_FIELDS.forEach((fieldname) => {
 	frappe.ui.form.on("Glass Product Specification", fieldname, (frm) => {
+		if (gf_spec_is_locked(frm)) {
+			return;
+		}
 		gf_refresh_spec_preview(frm);
 		if (!frm.is_new() && GF_SPEC_PRICING_FIELDS.includes(fieldname)) {
 			gf_refresh_spec_pricing(frm, { silent: true });
@@ -160,6 +124,9 @@ GF_SPEC_PRICING_FIELDS.forEach((fieldname) => {
 		return;
 	}
 	frappe.ui.form.on("Glass Product Specification", fieldname, (frm) => {
+		if (gf_spec_is_locked(frm)) {
+			return;
+		}
 		if (frm.is_new()) {
 			gf_refresh_spec_preview(frm);
 			return;
@@ -169,16 +136,190 @@ GF_SPEC_PRICING_FIELDS.forEach((fieldname) => {
 });
 
 frappe.ui.form.on("Glass Spec Operation Pricing", {
+	is_overridden(frm, cdt, cdn) {
+		gf_sync_operation_pricing_row_rate_state(frm, cdt, cdn);
+	},
 	rate(frm, cdt, cdn) {
 		const row = locals[cdt][cdn];
 		const qty = flt(row.quantity);
 		const rate = flt(row.rate);
 		const default_rate = flt(row.default_rate);
 		frappe.model.set_value(cdt, cdn, "amount", flt(qty * rate, 2));
-		frappe.model.set_value(cdt, cdn, "is_overridden", rate !== default_rate ? 1 : 0);
-		frappe.model.set_value(cdt, cdn, "source", rate !== default_rate ? "Manual" : "Settings");
+		if (cint(row.is_overridden)) {
+			frappe.model.set_value(cdt, cdn, "source", rate !== default_rate ? "Manual" : "Settings");
+		}
 	},
 });
+
+function gf_spec_is_locked(frm) {
+	return frm.doc.docstatus === 1;
+}
+
+function gf_spec_is_submitted(frm) {
+	return frm.doc.docstatus === 1;
+}
+
+function gf_spec_pricing_is_valid(frm) {
+	return flt(frm.doc.calculated_amount_per_piece) > 0 && !!frm.doc.item_code_preview;
+}
+
+function gf_spec_can_refresh_pricing(frm) {
+	if (frm.is_new()) {
+		return false;
+	}
+	if (gf_spec_is_submitted(frm) && !cint(frm.doc.allow_regeneration)) {
+		return false;
+	}
+	return frm.doc.status !== "Cancelled";
+}
+
+function gf_spec_can_generate_items(frm) {
+	if (frm.is_new() || gf_spec_is_submitted(frm)) {
+		return false;
+	}
+	if (cint(frm.doc.items_generated) && frm.doc.generation_status !== "Regeneration Required") {
+		return cint(frm.doc.allow_regeneration);
+	}
+	return gf_spec_pricing_is_valid(frm);
+}
+
+function gf_set_spec_status_indicator(frm) {
+	const status = frm.doc.status || "Draft";
+	const color = GF_SPEC_STATUS_COLORS[status] || "gray";
+	frm.page.set_indicator(status, color);
+}
+
+function gf_apply_spec_form_locks(frm) {
+	const locked = gf_spec_is_locked(frm);
+	const pricing_locked = locked && !cint(frm.doc.allow_regeneration);
+
+	[
+		"raw_sheet_item",
+		"length_mm",
+		"width_mm",
+		"qty",
+		"polish",
+		"bevel",
+		"temper",
+		"sandblast",
+		"laminate",
+		"hole_count",
+		"special_hole_count",
+		"slot_count",
+		"special_slot_count",
+		"operation_pricing",
+		"manual_selling_rate_per_m2",
+		"price_override",
+		"raw_sheet_rate_per_piece",
+		"raw_cost_per_m2",
+		"raw_selling_rate_per_m2",
+		"raw_cost_per_finished_piece",
+	].forEach((fieldname) => {
+		frm.set_df_property(fieldname, "read_only", pricing_locked);
+	});
+
+	if (locked) {
+		frm.set_df_property("allow_regeneration", "read_only", 1);
+	}
+}
+
+function gf_setup_spec_operation_pricing_grid(frm) {
+	const grid = frm.fields_dict.operation_pricing?.grid;
+	if (!grid) {
+		return;
+	}
+
+	const locked = gf_spec_is_locked(frm) && !cint(frm.doc.allow_regeneration);
+	grid.toggle_enable("is_overridden", !locked);
+	grid.toggle_enable("rate", !locked);
+
+	(frm.doc.operation_pricing || []).forEach((row) => {
+		gf_sync_operation_pricing_row_rate_state(frm, row.doctype, row.name);
+	});
+}
+
+function gf_sync_operation_pricing_row_rate_state(frm, cdt, cdn) {
+	const row = locals[cdt][cdn];
+	if (!row) {
+		return;
+	}
+
+	const grid = frm.fields_dict.operation_pricing?.grid;
+	const locked = gf_spec_is_locked(frm) && !cint(frm.doc.allow_regeneration);
+	const rate_editable = !locked && cint(row.is_overridden);
+
+	if (grid) {
+		grid.toggle_enable("rate", rate_editable, cdn);
+	}
+
+	if (!cint(row.is_overridden) && flt(row.rate) !== flt(row.default_rate)) {
+		frappe.model.set_value(cdt, cdn, "rate", flt(row.default_rate));
+		frappe.model.set_value(cdt, cdn, "source", "Settings");
+		frappe.model.set_value(cdt, cdn, "amount", flt(flt(row.quantity) * flt(row.default_rate), 2));
+	}
+}
+
+function gf_setup_spec_custom_buttons(frm) {
+	if (gf_spec_can_refresh_pricing(frm)) {
+		frm.add_custom_button(__("Refresh Pricing"), () => {
+			gf_refresh_spec_pricing(frm);
+		});
+	}
+
+	frm.add_custom_button(__("Refresh Preview"), () => {
+		gf_refresh_spec_preview(frm);
+	});
+
+	if (!frm.is_new() && gf_spec_can_refresh_pricing(frm)) {
+		frm.add_custom_button(__("Refresh Operation Rates"), () => {
+			gf_refresh_operation_rates(frm);
+		}, __("Pricing"));
+
+		frm.add_custom_button(__("Reset Operation Rates to Settings"), () => {
+			frappe.confirm(
+				__("Reset all operation rates to settings defaults? Manual overrides will be lost."),
+				() => gf_reset_operation_rates(frm)
+			);
+		}, __("Pricing"));
+	}
+
+	if (gf_spec_can_generate_items(frm)) {
+		const label =
+			frm.doc.generation_status === "Regeneration Required"
+				? __("Regenerate Items")
+				: __("Generate Items");
+		frm.add_custom_button(label, () => {
+			gf_generate_spec_items(frm);
+		});
+	}
+
+	if (
+		!frm.is_new() &&
+		cint(frm.doc.items_generated) &&
+		!gf_spec_is_submitted(frm)
+	) {
+		frm.add_custom_button(__("Reset Generated Links"), () => {
+			gf_reset_spec_generated_items(frm);
+		});
+	}
+
+	if (glass_factory.sync.spec_transaction_buttons_visible(frm)) {
+		frm.add_custom_button(__("Create Quotation"), () => {
+			glass_factory.sync.show_add_spec_from_spec_dialog(frm, "Quotation");
+		}, __("Create"));
+
+		frm.add_custom_button(__("Create Sales Order"), () => {
+			glass_factory.sync.show_add_spec_from_spec_dialog(frm, "Sales Order");
+		}, __("Create"));
+	}
+
+	if (frm.doc.final_item_code || frm.doc.generated_item) {
+		frm.add_custom_button(__("Open Final Item"), () => {
+			const item_code = frm.doc.final_item_code || frm.doc.generated_item;
+			frappe.set_route("Form", "Item", item_code);
+		});
+	}
+}
 
 function gf_pull_from_raw_sheet_item(frm) {
 	if (!frm.doc.raw_sheet_item) {
@@ -257,20 +398,20 @@ function gf_refresh_spec_pricing(frm, options = {}) {
 		if (!options.silent) {
 			const currency = message.currency || frm.doc.currency || "";
 			const lines = [
-				__("Raw Selling / Piece: {0}", [
+				__("Raw Glass Charge: {0}", [
 					format_currency(message.raw_selling_amount_per_finished_piece, currency),
 				]),
-				__("Processing Amount / Piece: {0}", [
+				__("Processing Charge: {0}", [
 					format_currency(message.processing_amount_per_piece, currency),
 				]),
-				__("Calculated Rate / m²: {0}", [
-					format_currency(message.calculated_rate_per_m2, currency),
+				__("Calculated Price / Piece: {0}", [
+					format_currency(message.calculated_amount_per_piece, currency),
 				]),
-				__("Final Selling Rate / m²: {0}", [
+				__("Selling Rate / m²: {0}", [
 					format_currency(message.selling_rate_per_m2, currency),
 				]),
-				__("Rate / Piece: {0}", [format_currency(message.rate_per_piece, currency)]),
-				__("Total Amount: {0}", [format_currency(message.amount, currency)]),
+				__("Final Price / Piece: {0}", [format_currency(message.rate_per_piece, currency)]),
+				__("Total Price: {0}", [format_currency(message.amount, currency)]),
 				__("Profit / Piece: {0} ({1}%)", [
 					format_currency(message.gross_profit_per_piece, currency),
 					flt(message.gross_profit_percent, 1),
@@ -309,16 +450,6 @@ function gf_refresh_operation_rates(frm) {
 	}).then(({ message }) => {
 		if (!message) {
 			return;
-		}
-		const currency = message.currency || frm.doc.currency || "";
-		const lines = [
-			__("Processing Amount / Piece: {0}", [
-				format_currency(message.processing_amount_per_piece, currency),
-			]),
-			__("Rate / Piece: {0}", [format_currency(message.rate_per_piece, currency)]),
-		];
-		if (message.warnings && message.warnings.length) {
-			message.warnings.forEach((w) => lines.push(`<span style="color:orange">${w}</span>`));
 		}
 		frappe.show_alert({
 			message: __("Operation rates refreshed. Manual overrides preserved."),

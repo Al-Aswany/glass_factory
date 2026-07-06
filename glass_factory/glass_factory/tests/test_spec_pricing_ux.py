@@ -571,6 +571,9 @@ class TestRefreshPricingIntegration(IntegrationTestCase):
         )
         _set_operation_rates(_usd_rates())
         cls._selling_price_state = _setup_per_m2_selling_price()
+        from glass_factory.glass_factory.tests.test_spec_form_ux import _setup_buying_price_for_tests
+
+        cls._buying_price_state = _setup_buying_price_for_tests()
 
     @classmethod
     def tearDownClass(cls):
@@ -584,8 +587,12 @@ class TestRefreshPricingIntegration(IntegrationTestCase):
         super().tearDownClass()
 
     def _new_spec(self, **overrides):
-        from glass_factory.glass_factory.tests.test_glass_product_specification import _new_spec
-        return _new_spec(**overrides)
+        from glass_factory.glass_factory.tests.test_glass_product_specification import (
+            _new_spec,
+            _refresh_pricing_context,
+        )
+
+        return _new_spec(**_refresh_pricing_context(**overrides))
 
     def test_refresh_pricing_builds_operation_pricing_rows(self):
         """Test 6 (integration): refresh_pricing builds operation_pricing rows."""
@@ -737,8 +744,12 @@ class TestCompatibilitySpec(IntegrationTestCase):
         super().tearDownClass()
 
     def _new_spec(self, **overrides):
-        from glass_factory.glass_factory.tests.test_glass_product_specification import _new_spec
-        return _new_spec(**overrides)
+        from glass_factory.glass_factory.tests.test_glass_product_specification import (
+            _new_spec,
+            _refresh_pricing_context,
+        )
+
+        return _new_spec(**_refresh_pricing_context(**overrides))
 
     def _insert_full_spec(self, **overrides):
         from glass_factory.glass_factory.tests.test_glass_product_specification_items import (

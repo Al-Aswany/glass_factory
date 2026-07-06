@@ -31,8 +31,13 @@ def _full_spec_kwargs(**overrides):
 
 
 def _insert_full_spec(**overrides):
-	doc = _new_spec(**_full_spec_kwargs(**overrides))
+	doc = _new_spec(**_full_spec_kwargs(currency="USD", **overrides))
 	doc.insert()
+	if not overrides.get("skip_pricing_setup"):
+		doc.raw_sheet_rate_per_piece = flt(overrides.get("raw_sheet_rate_per_piece") or 100)
+		doc.raw_selling_rate_per_m2 = flt(overrides.get("raw_selling_rate_per_m2") or 120)
+		doc.save()
+		doc.reload()
 	return doc
 
 
@@ -76,7 +81,7 @@ class TestGlassProductSpecificationItems(IntegrationTestCase):
 		self.assertEqual(doc.generated_item, expected_final)
 		self.assertEqual(cint(doc.items_generated), 1)
 		self.assertEqual(doc.generation_status, "Generated")
-		self.assertEqual(doc.status, "Ready")
+		self.assertEqual(doc.status, "Items Generated")
 		self.assertTrue(doc.generated_on)
 		self.assertEqual(doc.generated_by, frappe.session.user)
 

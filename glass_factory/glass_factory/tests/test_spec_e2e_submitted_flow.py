@@ -490,7 +490,7 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
         spec.generate_items()
         spec.reload()
 
-        self.assertEqual(spec.status,            "Ready",     "status must be Ready")
+        self.assertEqual(spec.status,            "Items Generated", "status must be Items Generated")
         self.assertEqual(spec.generation_status, "Generated", "generation_status must be Generated")
         self.assertEqual(cint(spec.items_generated), 1)
         self.assertTrue(spec.raw_item_code,     "raw_item_code must be set")

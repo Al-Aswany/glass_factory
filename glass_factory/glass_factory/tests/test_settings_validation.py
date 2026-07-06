@@ -394,27 +394,34 @@ class TestPricingLookupFallback(IntegrationTestCase):
 			frappe.db.commit()
 
 	def test_operation_cost_rate_returns_from_settings(self):
-		"""get_operation_cost_rate reads cost_rate from operation_rates table."""
+		"""get_operation_cost_rate reads cost_rate from operation_rates table.
+
+		Uses a mocked Settings object instead of writing to the real singleton: an earlier
+		version of this test called settings.save(ignore_permissions=True) on the live
+		Glass Factory Settings document, which (combined with frappe.db.commit() in
+		tearDown) permanently polluted real operation-rate data with a throwaway
+		"Temper 10/7 USD" row every time the suite ran.
+		"""
 		from glass_factory.glass_factory.spec_pricing import get_operation_cost_rate
 
-		settings = frappe.get_single("Glass Factory Settings")
-		settings.append("operation_rates", {
-			"operation": "Temper",
-			"currency": "USD",
-			"pricing_basis": "Per Square Meter",
-			"rate": 10,
-			"cost_rate": 7,
-			"enabled": 1,
-		})
-		settings.save(ignore_permissions=True)
-
-		try:
-			result = get_operation_cost_rate("Temper", "USD", "Per Square Meter")
-			self.assertEqual(flt(result), 7.0)
-		finally:
-			settings.reload()
-			settings.save(ignore_permissions=True)
-			frappe.db.commit()
+		fake_settings = frappe._dict(
+			operation_rates=[
+				frappe._dict(
+					operation="Temper",
+					currency="USD",
+					pricing_basis="Per Square Meter",
+					rate=10,
+					cost_rate=7,
+					enabled=1,
+				)
+			]
+		)
+		with patch(
+			"glass_factory.glass_factory.spec_pricing.frappe.get_single", return_value=fake_settings
+		):
+			with patch("glass_factory.glass_factory.spec_pricing.frappe.db.exists", return_value=True):
+				result = get_operation_cost_rate("Temper", "USD", "Per Square Meter")
+		self.assertEqual(flt(result), 7.0)
 
 	def test_operation_cost_rate_returns_zero_when_not_set(self):
 		"""get_operation_cost_rate returns 0 when no matching row exists."""
@@ -424,25 +431,31 @@ class TestPricingLookupFallback(IntegrationTestCase):
 		self.assertEqual(result, 0)
 
 	def test_get_operation_rate_not_affected_by_disabled_rows(self):
-		"""Disabled rows in operation_rates are ignored."""
+		"""Disabled rows in operation_rates are ignored.
+
+		Uses a mocked Settings object instead of writing to the real singleton: an earlier
+		version of this test called settings.save(ignore_permissions=True) on the live
+		Glass Factory Settings document, which (combined with frappe.db.commit() in
+		tearDown) permanently polluted real operation-rate data with a throwaway
+		"Sandblast 999" row every time the suite ran.
+		"""
 		from glass_factory.glass_factory.spec_pricing import get_operation_rate
 
-		settings = frappe.get_single("Glass Factory Settings")
-		settings.append("operation_rates", {
-			"operation": "Sandblast",
-			"currency": "USD",
-			"pricing_basis": "Per Square Meter",
-			"rate": 999,
-			"cost_rate": 0,
-			"enabled": 0,
-		})
-		settings.save(ignore_permissions=True)
-
-		try:
-			# Disabled row should not be returned; will fall back to legacy or 0
-			result = get_operation_rate("Sandblast", "USD", "Per Square Meter")
-			self.assertNotEqual(result, 999, "Disabled row rate should not be used")
-		finally:
-			settings.reload()
-			settings.save(ignore_permissions=True)
-			frappe.db.commit()
+		fake_settings = frappe._dict(
+			operation_rates=[
+				frappe._dict(
+					operation="Sandblast",
+					currency="USD",
+					pricing_basis="Per Square Meter",
+					rate=999,
+					cost_rate=0,
+					enabled=0,
+				)
+			]
+		)
+		with patch(
+			"glass_factory.glass_factory.spec_pricing.frappe.get_single", return_value=fake_settings
+		):
+			with patch("glass_factory.glass_factory.spec_pricing.frappe.db.exists", return_value=True):
+				result = get_operation_rate("Sandblast", "USD", "Per Square Meter")
+		self.assertNotEqual(result, 999, "Disabled row rate should not be used")

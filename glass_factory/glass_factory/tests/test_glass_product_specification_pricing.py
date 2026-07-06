@@ -12,7 +12,7 @@ from glass_factory.glass_factory.spec_pricing import (
 	get_spec_currency,
 	pricing_result,
 )
-from glass_factory.glass_factory.tests.test_glass_product_specification import _base_spec_kwargs, _new_spec
+from glass_factory.glass_factory.tests.test_glass_product_specification import _base_spec_kwargs, _new_spec, _refresh_pricing_context
 from glass_factory.glass_factory.tests.test_glass_product_specification_items import (
 	RAW_SHEET_ITEM,
 	_full_spec_kwargs,
@@ -222,6 +222,9 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 		)
 		_set_operation_rates(_usd_rates())
 		cls._ensure_per_m2_selling_price()
+		from glass_factory.glass_factory.tests.test_spec_form_ux import _setup_buying_price_for_tests
+
+		cls._buying_price_state = _setup_buying_price_for_tests()
 
 	@classmethod
 	def _ensure_per_m2_selling_price(cls):
@@ -297,10 +300,11 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 
 	def test_refresh_pricing_fetches_and_saves(self):
 		doc = _new_spec(
-			raw_sheet_item=RAW_SHEET_ITEM,
-			currency="USD",
-			price_list=TEST_SELLING_PRICE_LIST,
-			polish=1,
+			**_refresh_pricing_context(
+				raw_sheet_item=RAW_SHEET_ITEM,
+				price_list=TEST_SELLING_PRICE_LIST,
+				polish=1,
+			)
 		)
 		doc.insert()
 		result = doc.refresh_pricing()
@@ -328,13 +332,22 @@ class TestGlassProductSpecificationPricingIntegration(IntegrationTestCase):
 			)
 
 		doc = _new_spec(
-			raw_sheet_item=RAW_SHEET_ITEM,
-			currency="USD",
-			price_list=missing_price_list,
+			**_refresh_pricing_context(
+				raw_sheet_item=RAW_SHEET_ITEM,
+				price_list=missing_price_list,
+			)
 		)
 		doc.insert()
-		with self.assertRaises(frappe.ValidationError) as ctx:
-			doc.refresh_pricing()
+		with patch(
+			"glass_factory.glass_factory.doctype.glass_product_specification.glass_product_specification.fetch_raw_selling_rate_per_m2",
+			side_effect=lambda *args, **kwargs: (
+				frappe.throw("Missing selling Item Price for raw sheet item with UOM Square Meter.")
+				if kwargs.get("throw_if_missing")
+				else 0
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				doc.refresh_pricing()
 		self.assertIn("Missing selling Item Price", str(ctx.exception))
 		doc.delete()
 		frappe.db.commit()

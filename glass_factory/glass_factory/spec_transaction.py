@@ -8,6 +8,8 @@ from frappe.utils import cint, flt, getdate, today
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 from glass_factory.glass_factory.spec_production import enrich_spec_transaction_row
 
+TRANSACTION_READY_STATUSES = frozenset({"Ready", "Items Generated", "Used"})
+
 SUPPORTED_TARGET_DOCTYPES = ("Quotation", "Sales Order")
 
 SPEC_TRANSACTION_ROW_FIELDS = (
@@ -49,8 +51,8 @@ def validate_spec_ready_for_transaction(spec, *, allow_zero_price: bool = False)
 		frappe.throw("Generate items before adding this specification to a transaction.")
 
 	status = spec.get("status") or "Draft"
-	if status not in ("Ready", "Used"):
-		frappe.throw("This specification must be Ready before it can be used in a transaction.")
+	if status not in TRANSACTION_READY_STATUSES:
+		frappe.throw("This specification must be ready before it can be used in a transaction.")
 
 	if flt(spec.get("area_m2")) <= 0:
 		frappe.throw("Area must be greater than zero.")

@@ -7,26 +7,27 @@
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
-  "company",
+  "tab_specification",
   "customer",
+  "company",
   "currency",
-  "column_break_n87e",
+  "column_break_header",
   "price_list",
   "status",
   "generation_status",
   "section_glass_details",
   "raw_sheet_item",
+  "glass_type",
+  "thickness_mm",
   "length_mm",
   "width_mm",
   "qty",
   "column_break_glass_details_2",
-  "glass_type",
-  "thickness_mm",
-  "raw_sheet_length_mm",
-  "raw_sheet_width_mm",
-  "raw_sheet_area_m2",
   "area_m2",
-  "total_area_m2",
+  "raw_sheet_area_m2",
+  "technical_summary",
+  "item_code_preview",
+  "tab_operations",
   "section_processing_operations",
   "polish",
   "bevel",
@@ -38,59 +39,67 @@
   "special_hole_count",
   "slot_count",
   "special_slot_count",
+  "tab_operation_pricing",
+  "operation_pricing",
+  "tab_pricing_summary",
   "section_pricing_summary",
   "raw_selling_amount_per_finished_piece",
   "processing_amount_per_piece",
   "calculated_amount_per_piece",
   "column_break_pricing_summary_2",
-  "calculated_rate_per_m2",
-  "manual_selling_rate_per_m2",
   "selling_rate_per_m2",
-  "price_override",
   "column_break_pricing_summary_3",
   "rate_per_piece",
   "amount",
+  "estimated_cost_per_piece",
+  "column_break_pricing_summary_4",
   "gross_profit_per_piece",
-  "gross_profit_per_m2",
   "gross_profit_percent",
   "total_gross_profit",
-  "section_operation_pricing",
-  "operation_pricing",
   "section_raw_glass_pricing",
   "raw_sheet_rate_per_piece",
-  "raw_sheet_selling_rate_per_piece",
-  "column_break_raw_pricing",
   "raw_cost_per_m2",
+  "column_break_raw_pricing",
   "raw_selling_rate_per_m2",
-  "column_break_raw_pricing_2",
   "raw_cost_per_finished_piece",
-  "estimated_cost_per_piece",
+  "column_break_raw_pricing_2",
+  "tab_design_files",
   "section_design_attachments",
   "design_attachments",
+  "tab_generated_items",
   "section_generated_items",
   "raw_item_code",
   "cut_wip_item_code",
   "final_item_code",
   "generated_item",
   "items_generated",
-  "column_break_nygj",
+  "column_break_generated",
   "generated_on",
   "generated_by",
-  "allow_regeneration",
+  "tab_advanced",
   "section_advanced_details",
   "edge_meter",
   "chargeable_area_m2",
   "total_chargeable_area_m2",
+  "column_break_advanced_1",
+  "raw_sheet_length_mm",
+  "raw_sheet_width_mm",
+  "total_area_m2",
   "column_break_advanced_2",
   "area_processing_amount_per_piece",
   "edge_processing_amount_per_piece",
   "unit_processing_amount_per_piece",
   "price_difference_per_m2",
+  "calculated_rate_per_m2",
+  "gross_profit_per_m2",
   "column_break_advanced_3",
-  "item_code_preview",
+  "manual_selling_rate_per_m2",
+  "price_override",
+  "raw_sheet_selling_rate_per_piece",
   "operation_code_preview",
-  "technical_summary",
-  "remarks"
+  "allow_regeneration",
+  "remarks",
+  "amended_from"
  ],
  "fields": [
   {
@@ -106,12 +115,9 @@
    "set_only_once": 1
   },
   {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Company",
-   "options": "Company"
+   "fieldname": "tab_specification",
+   "fieldtype": "Tab Break",
+   "label": "Specification"
   },
   {
    "fieldname": "customer",
@@ -120,15 +126,27 @@
    "options": "Customer"
   },
   {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company"
+  },
+  {
    "fieldname": "currency",
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency"
   },
   {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "price_list",
    "fieldtype": "Link",
-   "label": "Selling Price List",
+   "label": "Price List",
    "options": "Price List"
   },
   {
@@ -138,7 +156,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Draft\nReady\nUsed\nCancelled",
+   "options": "Draft\nPriced\nReady\nItems Generated\nUsed\nSubmitted\nCancelled",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -159,34 +178,10 @@
   {
    "fieldname": "raw_sheet_item",
    "fieldtype": "Link",
-   "label": "Raw Glass Sheet",
+   "label": "Raw Sheet Item",
    "options": "Item",
+   "read_only_depends_on": "eval:doc.docstatus==1",
    "reqd": 1
-  },
-  {
-   "fieldname": "length_mm",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Finished Length (mm)",
-   "reqd": 1
-  },
-  {
-   "fieldname": "width_mm",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Finished Width (mm)",
-   "reqd": 1
-  },
-  {
-   "default": "1",
-   "fieldname": "qty",
-   "fieldtype": "Float",
-   "label": "Qty",
-   "precision": "2"
-  },
-  {
-   "fieldname": "column_break_glass_details_2",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "glass_type",
@@ -200,77 +195,108 @@
    "fieldname": "thickness_mm",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Thickness (mm)",
+   "label": "Thickness mm",
    "read_only": 1,
    "reqd": 1
   },
   {
-   "fieldname": "raw_sheet_length_mm",
+   "fieldname": "length_mm",
    "fieldtype": "Float",
-   "label": "Raw Sheet Length (mm)",
-   "read_only": 1
+   "in_list_view": 1,
+   "label": "Finished Length mm",
+   "read_only_depends_on": "eval:doc.docstatus==1",
+   "reqd": 1
   },
   {
-   "fieldname": "raw_sheet_width_mm",
+   "fieldname": "width_mm",
    "fieldtype": "Float",
-   "label": "Raw Sheet Width (mm)",
+   "in_list_view": 1,
+   "label": "Finished Width mm",
+   "read_only_depends_on": "eval:doc.docstatus==1",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "precision": "2",
+   "read_only_depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "column_break_glass_details_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "area_m2",
+   "fieldtype": "Float",
+   "label": "Area m\u00b2",
+   "precision": "6",
    "read_only": 1
   },
   {
    "fieldname": "raw_sheet_area_m2",
    "fieldtype": "Float",
-   "label": "Raw Sheet Area (m\u00b2)",
+   "label": "Raw Sheet Area m\u00b2",
    "precision": "6",
    "read_only": 1
   },
   {
-   "fieldname": "area_m2",
-   "fieldtype": "Float",
-   "label": "Area / Piece (m\u00b2)",
-   "precision": "6",
+   "fieldname": "technical_summary",
+   "fieldtype": "Small Text",
+   "label": "Technical Summary",
    "read_only": 1
   },
   {
-   "fieldname": "total_area_m2",
-   "fieldtype": "Float",
-   "label": "Total Area (m\u00b2)",
-   "precision": "6",
+   "fieldname": "item_code_preview",
+   "fieldtype": "Data",
+   "label": "Item Code Preview",
    "read_only": 1
+  },
+  {
+   "fieldname": "tab_operations",
+   "fieldtype": "Tab Break",
+   "label": "Operations"
   },
   {
    "fieldname": "section_processing_operations",
    "fieldtype": "Section Break",
-   "label": "Operations"
+   "label": "Processing Operations"
   },
   {
    "default": "0",
    "fieldname": "polish",
    "fieldtype": "Check",
-   "label": "Polish"
+   "label": "Polish",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "bevel",
    "fieldtype": "Check",
-   "label": "Bevel"
+   "label": "Bevel",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "temper",
    "fieldtype": "Check",
-   "label": "Temper"
+   "label": "Temper",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "sandblast",
    "fieldtype": "Check",
-   "label": "Sandblast"
+   "label": "Sandblast",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "laminate",
    "fieldtype": "Check",
-   "label": "Laminate"
+   "label": "Laminate",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "fieldname": "column_break_processing_counts",
@@ -280,25 +306,46 @@
    "default": "0",
    "fieldname": "hole_count",
    "fieldtype": "Int",
-   "label": "Hole Count"
+   "label": "Hole Count",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "special_hole_count",
    "fieldtype": "Int",
-   "label": "Special Hole Count"
+   "label": "Special Hole Count",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "slot_count",
    "fieldtype": "Int",
-   "label": "Slot Count"
+   "label": "Slot Count",
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "default": "0",
    "fieldname": "special_slot_count",
    "fieldtype": "Int",
-   "label": "Special Slot Count"
+   "label": "Special Slot Count",
+   "read_only_depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "tab_operation_pricing",
+   "fieldtype": "Tab Break",
+   "label": "Operation Pricing"
+  },
+  {
+   "fieldname": "operation_pricing",
+   "fieldtype": "Table",
+   "label": "Operation Pricing",
+   "options": "Glass Spec Operation Pricing",
+   "read_only_depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "tab_pricing_summary",
+   "fieldtype": "Tab Break",
+   "label": "Pricing Summary"
   },
   {
    "fieldname": "section_pricing_summary",
@@ -308,21 +355,21 @@
   {
    "fieldname": "raw_selling_amount_per_finished_piece",
    "fieldtype": "Currency",
-   "label": "Raw Selling Amount",
+   "label": "Raw Glass Charge",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "processing_amount_per_piece",
    "fieldtype": "Currency",
-   "label": "Processing Total",
+   "label": "Processing Charge",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "calculated_amount_per_piece",
    "fieldtype": "Currency",
-   "label": "Calculated Selling Amount / Piece",
+   "label": "Calculated Price / Piece",
    "options": "currency",
    "read_only": 1
   },
@@ -331,30 +378,10 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "calculated_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Calculated Selling Rate / m\u00b2",
-   "options": "currency",
-   "read_only": 1
-  },
-  {
-   "fieldname": "manual_selling_rate_per_m2",
-   "fieldtype": "Currency",
-   "label": "Manual Selling Rate / m\u00b2",
-   "options": "currency"
-  },
-  {
    "fieldname": "selling_rate_per_m2",
    "fieldtype": "Currency",
-   "label": "Final Rate / m\u00b2",
+   "label": "Selling Rate / m\u00b2",
    "options": "currency",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "price_override",
-   "fieldtype": "Check",
-   "label": "Price Override",
    "read_only": 1
   },
   {
@@ -364,35 +391,39 @@
   {
    "fieldname": "rate_per_piece",
    "fieldtype": "Currency",
-   "label": "Rate Per Piece",
+   "label": "Final Price / Piece",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "amount",
    "fieldtype": "Currency",
-   "label": "Total Amount",
+   "label": "Total Price",
    "options": "currency",
    "read_only": 1
+  },
+  {
+   "fieldname": "estimated_cost_per_piece",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost / Piece",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_pricing_summary_4",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "gross_profit_per_piece",
    "fieldtype": "Currency",
-   "label": "Margin / Piece",
-   "options": "currency",
-   "read_only": 1
-  },
-  {
-   "fieldname": "gross_profit_per_m2",
-   "fieldtype": "Currency",
-   "label": "Margin / m\u00b2",
+   "label": "Profit / Piece",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "gross_profit_percent",
    "fieldtype": "Float",
-   "label": "Margin %",
+   "label": "Profit %",
    "precision": "2",
    "read_only": 1
   },
@@ -404,17 +435,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "section_operation_pricing",
-   "fieldtype": "Section Break",
-   "label": "Operation Pricing"
-  },
-  {
-   "fieldname": "operation_pricing",
-   "fieldtype": "Table",
-   "label": "Operation Pricing",
-   "options": "Glass Spec Operation Pricing"
-  },
-  {
    "fieldname": "section_raw_glass_pricing",
    "fieldtype": "Section Break",
    "label": "Raw Glass Pricing"
@@ -424,52 +444,52 @@
    "fieldtype": "Currency",
    "label": "Buying Cost / Sheet",
    "options": "currency",
-   "read_only": 1
-  },
-  {
-   "description": "Deprecated: raw selling price per sheet is no longer used to calculate pricing. Raw glass selling is now priced per m\u00b2 (see Selling Rate / m\u00b2 below) using a dedicated selling Item Price with UOM Square Meter. This field is kept read-only for historical specs only.",
-   "fieldname": "raw_sheet_selling_rate_per_piece",
-   "fieldtype": "Currency",
-   "label": "Legacy Selling Price / Sheet (Deprecated)",
-   "options": "currency",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_raw_pricing",
-   "fieldtype": "Column Break"
+   "read_only": 1,
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "fieldname": "raw_cost_per_m2",
    "fieldtype": "Currency",
    "label": "Buying Cost / m\u00b2",
    "options": "currency",
-   "read_only": 1
+   "read_only": 1,
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
-   "description": "Fetched directly from the selling Item Price for the raw sheet item with UOM Square Meter. Not derived by dividing a per-sheet selling price.",
+   "fieldname": "column_break_raw_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "raw_selling_rate_per_m2",
    "fieldtype": "Currency",
    "label": "Selling Rate / m\u00b2",
    "options": "currency",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_raw_pricing_2",
-   "fieldtype": "Column Break"
+   "read_only": 1,
+   "read_only_depends_on": "eval:doc.docstatus==1"
   },
   {
    "fieldname": "raw_cost_per_finished_piece",
    "fieldtype": "Currency",
    "label": "Raw Cost / Finished Piece",
    "options": "currency",
+   "read_only": 1,
+   "read_only_depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "column_break_raw_pricing_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "raw_selling_amount_per_finished_piece",
+   "fieldtype": "Currency",
+   "label": "Raw Glass Charge",
+   "options": "currency",
    "read_only": 1
   },
   {
-   "fieldname": "estimated_cost_per_piece",
-   "fieldtype": "Currency",
-   "label": "Estimated Total Cost / Piece",
-   "options": "currency",
-   "read_only": 1
+   "fieldname": "tab_design_files",
+   "fieldtype": "Tab Break",
+   "label": "Design Files"
   },
   {
    "fieldname": "section_design_attachments",
@@ -481,6 +501,11 @@
    "fieldtype": "Table",
    "label": "Design Files",
    "options": "Glass Design Attachment"
+  },
+  {
+   "fieldname": "tab_generated_items",
+   "fieldtype": "Tab Break",
+   "label": "Generated Items / Transactions"
   },
   {
    "fieldname": "section_generated_items",
@@ -523,7 +548,7 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_nygj",
+   "fieldname": "column_break_generated",
    "fieldtype": "Column Break"
   },
   {
@@ -540,16 +565,15 @@
    "read_only": 1
   },
   {
-   "default": "0",
-   "fieldname": "allow_regeneration",
-   "fieldtype": "Check",
-   "label": "Allow Regeneration"
+   "fieldname": "tab_advanced",
+   "fieldtype": "Tab Break",
+   "label": "Advanced / Technical"
   },
   {
    "collapsible": 1,
    "fieldname": "section_advanced_details",
    "fieldtype": "Section Break",
-   "label": "Advanced Details"
+   "label": "Technical Details"
   },
   {
    "fieldname": "edge_meter",
@@ -561,14 +585,37 @@
   {
    "fieldname": "chargeable_area_m2",
    "fieldtype": "Float",
-   "label": "Chargeable Area (m\u00b2)",
+   "label": "Chargeable Area m\u00b2",
    "precision": "6",
    "read_only": 1
   },
   {
    "fieldname": "total_chargeable_area_m2",
    "fieldtype": "Float",
-   "label": "Total Chargeable Area (m\u00b2)",
+   "label": "Total Chargeable Area m\u00b2",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_advanced_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "raw_sheet_length_mm",
+   "fieldtype": "Float",
+   "label": "Raw Sheet Length mm",
+   "read_only": 1
+  },
+  {
+   "fieldname": "raw_sheet_width_mm",
+   "fieldtype": "Float",
+   "label": "Raw Sheet Width mm",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_area_m2",
+   "fieldtype": "Float",
+   "label": "Total Area m\u00b2",
    "precision": "6",
    "read_only": 1
   },
@@ -579,28 +626,42 @@
   {
    "fieldname": "area_processing_amount_per_piece",
    "fieldtype": "Currency",
-   "label": "Area Processing Amount (per piece)",
+   "label": "Area Processing Amount / Piece",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "edge_processing_amount_per_piece",
    "fieldtype": "Currency",
-   "label": "Edge Processing Amount (per piece)",
+   "label": "Edge Processing Amount / Piece",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "unit_processing_amount_per_piece",
    "fieldtype": "Currency",
-   "label": "Unit Processing Amount (per piece)",
+   "label": "Unit Processing Amount / Piece",
    "options": "currency",
    "read_only": 1
   },
   {
    "fieldname": "price_difference_per_m2",
    "fieldtype": "Currency",
-   "label": "Price Difference (per m\u00b2)",
+   "label": "Price Difference / m\u00b2",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "calculated_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Calculated Rate / m\u00b2",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gross_profit_per_m2",
+   "fieldtype": "Currency",
+   "label": "Profit / m\u00b2",
    "options": "currency",
    "read_only": 1
   },
@@ -609,9 +670,26 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "item_code_preview",
-   "fieldtype": "Data",
-   "label": "Item Code Preview",
+   "fieldname": "manual_selling_rate_per_m2",
+   "fieldtype": "Currency",
+   "label": "Manual Selling Rate / m\u00b2",
+   "options": "currency",
+   "read_only_depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "default": "0",
+   "fieldname": "price_override",
+   "fieldtype": "Check",
+   "label": "Price Override",
+   "read_only": 1,
+   "read_only_depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "description": "Deprecated: raw selling price per sheet is no longer used to calculate pricing. Raw glass selling is now priced per m\u00b2 (see Selling Rate / m\u00b2) using a dedicated selling Item Price with UOM Square Meter. This field is kept read-only for historical specs only.",
+   "fieldname": "raw_sheet_selling_rate_per_piece",
+   "fieldtype": "Currency",
+   "label": "Legacy Selling Price / Sheet (Deprecated)",
+   "options": "currency",
    "read_only": 1
   },
   {
@@ -621,10 +699,10 @@
    "read_only": 1
   },
   {
-   "fieldname": "technical_summary",
-   "fieldtype": "Small Text",
-   "label": "Technical Summary",
-   "read_only": 1
+   "default": "0",
+   "fieldname": "allow_regeneration",
+   "fieldtype": "Check",
+   "label": "Allow Regeneration"
   },
   {
    "fieldname": "remarks",
@@ -632,12 +710,19 @@
    "label": "Remarks"
   },
   {
-   "fieldname": "column_break_n87e",
-   "fieldtype": "Column Break"
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Glass Product Specification",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
   }
  ],
+ "is_submittable": 1,
  "links": [],
- "modified": "2026-06-28 12:00:00.000000",
+ "modified": "2026-07-06 04:25:20.926167",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Product Specification",
@@ -645,6 +730,8 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "amend": 1,
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -653,9 +740,12 @@
    "read": 1,
    "role": "System Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   },
   {
+   "amend": 1,
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -664,6 +754,7 @@
    "read": 1,
    "role": "Glass Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   },
   {
