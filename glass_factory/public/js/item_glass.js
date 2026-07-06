@@ -170,8 +170,16 @@ function gf_show_build_raw_code_dialog(frm) {
 		});
 
 		const update_preview = () => {
-			const values = d.get_values();
-			if (!values.glass_type || !values.thickness_mm || !values.length_mm || !values.width_mm) {
+			// Read raw field values instead of d.get_values(), which runs full mandatory-field
+			// validation as a side effect and would pop the "Missing Values Required" message
+			// on every keystroke (or immediately on open, for a brand-new Item) while the user
+			// is still filling in the dialog.
+			const glass_type = d.get_value("glass_type");
+			const thickness_mm = flt(d.get_value("thickness_mm"));
+			const length_mm = flt(d.get_value("length_mm"));
+			const width_mm = flt(d.get_value("width_mm"));
+
+			if (!glass_type || !thickness_mm || !length_mm || !width_mm) {
 				d.set_value("item_code_preview", "");
 				d.set_value("sheet_area_m2", 0);
 				return;
@@ -179,12 +187,7 @@ function gf_show_build_raw_code_dialog(frm) {
 
 			frappe.call({
 				method: "glass_factory.glass_factory.item_resolver.preview_raw_item_code",
-				args: {
-					glass_type: values.glass_type,
-					thickness_mm: values.thickness_mm,
-					length_mm: values.length_mm,
-					width_mm: values.width_mm,
-				},
+				args: { glass_type, thickness_mm, length_mm, width_mm },
 				async: true,
 			}).then(({ message }) => {
 				const valid = message && message.valid;
