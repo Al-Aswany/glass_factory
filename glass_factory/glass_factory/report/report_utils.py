@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional
 import frappe
 from frappe import _
 from frappe.query_builder import DocType
-from frappe.query_builder.functions import IfNull
 from frappe.utils import cint, flt, getdate
 
 from glass_factory.glass_factory.spec_pricing import get_operation_cost_rate
@@ -236,8 +235,3 @@ def raw_sheet_area_m2(length_mm: float, width_mm: float) -> float:
 	if length <= 0 or width <= 0:
 		return 0.0
 	return flt(length * width / 1_000_000, 4)
-
-
-def standard_report_filters_js() -> str:
-	"""Not used at runtime — reference for JS filter blocks."""
-	return ""
