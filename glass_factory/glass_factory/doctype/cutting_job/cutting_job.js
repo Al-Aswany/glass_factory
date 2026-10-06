@@ -46,6 +46,13 @@ frappe.ui.form.on("Cutting Job", {
 	},
 
 	add_custom_buttons(frm) {
+		if (frm.doc.name) {
+			frm.add_custom_button(__("View Layout"), () => {
+				frappe.route_options = { cutting_job: frm.doc.name };
+				frappe.set_route("query-report", "Layout Visualizer");
+			}, __("Layout"));
+		}
+
 		if (frm.doc.docstatus !== 1) return;
 
 		const specNames = [...new Set(

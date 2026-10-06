@@ -1,8 +1,8 @@
 """Layout Visualizer report for Cutting Job tabular layout rendering."""
 import frappe
-import json
 import re
 from collections import defaultdict
+from frappe.utils import flt
 from typing import List, Dict, Tuple
 
 
@@ -23,17 +23,22 @@ def execute(filters=None):
 
 	job = frappe.get_doc("Cutting Job", job_name)
 
-	tabular_files = _tabular_cop_files(job)
-	if not tabular_files:
-		return _empty_state(
-			"This Cutting Job has no tabular layout files attached yet. "
-			"Run the optimizer or attach COP Tabular XLSX outputs to render the layout."
-		)
+	layout_source = "cop"
+	sheets_data = _load_all_sheets(job) if _tabular_cop_files(job) else {}
+	if not sheets_data or not any(sheets_data.values()):
+		if not (job.get("pieces") and job.get("source_sheets")):
+			return _empty_state(
+				"This Cutting Job has no tabular layout files attached yet. "
+				"Add pieces and source sheets, or run the optimizer / attach COP Tabular XLSX outputs."
+			)
+		sheets_data = _build_layout_from_pieces(job)
+		layout_source = "estimated"
+		if not sheets_data:
+			return _empty_state("Could not build a layout from the cutting job pieces.")
 
-	sheets_data = _load_all_sheets(job)
 	color_map = _build_color_map(sheets_data)
 
-	html_blocks = [_styles(), _header(job)]
+	html_blocks = [_styles(), _header(job, layout_source)]
 	for sheet_idx in sorted(sheets_data.keys()):
 		pieces = sheets_data[sheet_idx]
 		sheet_meta = _sheet_meta(job, sheet_idx)
@@ -67,6 +72,118 @@ def _tabular_cop_files(job):
 		if row.attached_file
 		and (not getattr(row, "file_type", None) or str(row.file_type).lower() == "tabular")
 	]
+
+
+def _get_kerf_mm() -> float:
+	default = 3.0
+	if not frappe.db.exists("DocType", "Glass Factory Settings"):
+		return default
+
+	settings = frappe.get_single("Glass Factory Settings")
+	field_default = flt(settings.meta.get_field("kerf_mm").default or default)
+	kerf = settings.get("kerf_mm")
+	if kerf in (None, ""):
+		return field_default
+
+	kerf = flt(kerf)
+	if kerf == 0 and field_default:
+		return field_default
+	return kerf
+
+
+def _build_layout_from_pieces(job) -> Dict[int, List[Dict]]:
+	"""Build an estimated shelf layout from Cutting Job pieces when COP files are absent."""
+	source_sheets = list(job.get("source_sheets") or [])
+	if not source_sheets:
+		return {}
+
+	expanded: List[Dict] = []
+	for piece in job.get("pieces") or []:
+		qty = int(flt(piece.qty or piece.qty_required or 0))
+		if qty <= 0:
+			continue
+		label = piece.label or piece.parent_item or "Piece"
+		customer = piece.customer_name or piece.customer or ""
+		length_mm = flt(piece.length_mm)
+		width_mm = flt(piece.width_mm)
+		if length_mm <= 0 or width_mm <= 0:
+			continue
+		for _ in range(qty):
+			expanded.append({
+				"label": label,
+				"length_mm": length_mm,
+				"width_mm": width_mm,
+				"customer": customer,
+			})
+
+	if not expanded:
+		return {}
+
+	expanded.sort(key=lambda row: row["length_mm"] * row["width_mm"], reverse=True)
+	kerf = _get_kerf_mm()
+	sheets_data: Dict[int, List[Dict]] = defaultdict(list)
+
+	sheet_idx = 0
+	sheet_w = flt(source_sheets[sheet_idx].length_mm)
+	sheet_h = flt(source_sheets[sheet_idx].width_mm)
+	x = 0.0
+	y = 0.0
+	row_h = 0.0
+
+	def advance_sheet() -> bool:
+		nonlocal sheet_idx, x, y, row_h, sheet_w, sheet_h
+		if sheet_idx >= len(source_sheets) - 1:
+			return False
+		sheet_idx += 1
+		x = 0.0
+		y = 0.0
+		row_h = 0.0
+		sheet_w = flt(source_sheets[sheet_idx].length_mm)
+		sheet_h = flt(source_sheets[sheet_idx].width_mm)
+		return True
+
+	for piece in expanded:
+		orientations = [
+			(piece["length_mm"], piece["width_mm"], False),
+			(piece["width_mm"], piece["length_mm"], True),
+		]
+		if piece["length_mm"] == piece["width_mm"]:
+			orientations = orientations[:1]
+
+		placed = False
+		while not placed:
+			for length, width, rotated in orientations:
+				if x + length <= sheet_w + 0.01 and y + width <= sheet_h + 0.01:
+					left, top = x, y
+				elif length <= sheet_w + 0.01 and y + row_h + kerf + width <= sheet_h + 0.01:
+					left, top = 0.0, y + row_h + kerf
+					x = 0.0
+					y = top
+					row_h = 0.0
+				else:
+					continue
+
+				sheets_data[sheet_idx + 1].append({
+					"Label": piece["label"],
+					"Length": length,
+					"Width": width,
+					"Left": left,
+					"Top": top,
+					"Rotated": 1 if rotated else 0,
+					"Customer name": piece["customer"],
+				})
+				x = left + length + kerf
+				y = top
+				row_h = max(row_h, width)
+				placed = True
+				break
+
+			if placed:
+				continue
+			if not advance_sheet():
+				break
+
+	return dict(sheets_data)
 
 
 def _load_all_sheets(job) -> Dict[int, List[Dict]]:
@@ -141,13 +258,20 @@ def _build_color_map(sheets_data: Dict[int, List[Dict]]) -> Dict[str, str]:
 # HTML rendering
 # ---------------------------------------------------------------------------
 
-def _header(job) -> str:
+def _header(job, layout_source: str = "cop") -> str:
 	status = frappe.utils.escape_html(job.status or "")
+	source_note = ""
+	if layout_source == "estimated":
+		source_note = (
+			'<div class="lv-estimated">Estimated layout from pieces '
+			"(no COP tabular file attached)</div>"
+		)
 	return f"""
 	<div class="lv-header">
 		<div class="lv-title">
 			<div class="lv-job">{frappe.utils.escape_html(job.name)}</div>
 			<div class="lv-sub">Cutting Layout Visualization</div>
+			{source_note}
 		</div>
 		<div class="lv-status lv-status-{status.lower()}">{status}</div>
 	</div>
@@ -350,6 +474,11 @@ def _styles() -> str:
 }
 .lv-title .lv-job { font-size: 18px; font-weight: 700; color: var(--text-color); }
 .lv-title .lv-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.lv-estimated {
+	margin-top: 6px; font-size: 12px; color: #d68910;
+	background: rgba(246, 189, 22, 0.12); display: inline-block;
+	padding: 4px 10px; border-radius: 6px;
+}
 .lv-status {
 	padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 600;
 	text-transform: uppercase; letter-spacing: 0.4px;
