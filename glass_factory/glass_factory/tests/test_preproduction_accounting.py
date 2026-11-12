@@ -1993,7 +1993,13 @@ def noncommercial_sales_probe() -> str:
 			"sales_invoice_update_stock": _sell_attempt("Sales Invoice", item_code, update_stock=1),
 			"sales_invoice_no_stock": _sell_attempt("Sales Invoice", item_code, update_stock=0),
 		}
-		for document in ("quotation", "sales_order", "delivery_note", "sales_invoice_update_stock"):
+		for document in (
+			"quotation",
+			"sales_order",
+			"delivery_note",
+			"sales_invoice_update_stock",
+			"sales_invoice_no_stock",
+		):
 			expect(
 				"cannot use" in results[label][document].lower(),
 				f"{label} {document} was not blocked: {results[label][document]}",
@@ -2001,6 +2007,63 @@ def noncommercial_sales_probe() -> str:
 	EVIDENCE["noncommercial_sales"] = results
 	frappe.db.commit()
 	return json.dumps({label: {key: str(value)[:120] for key, value in row.items()} for label, row in results.items()})
+
+
+def sales_invoice_commercial_lines() -> str:
+	"""Finished-goods invoices, ordinary lines, and linked returns stay open. Raw sheet and Cut WIP do not."""
+	from erpnext.accounts.doctype.sales_invoice.sales_invoice import make_sales_return
+
+	v.prepare()
+	set_capitalization(False)
+	currency = v.company_currency()
+	batch_no = v.raw_batch(sheets=1, rate=100)
+	spec = make_spec_ops(currency, "GFV Selling", 1, length=1200, width=800, polish=1, temper=0)
+	_quotation, so = v.quote_and_order(spec)
+	job = v.cut(v.cutting_job_for(so, batch_no))
+	processing = v.process(job)
+	final_no = v.final_batch(processing)
+	dn = v.delivery_for(so, batch_no=final_no)
+	invoice = v.invoice_for(dn)
+	expect(not cint_flag(invoice.update_stock), "the delivery-note invoice updated stock itself")
+	expect(invoice.items[0].item_code == spec.final_item_code, f"invoice item {invoice.items[0].item_code}")
+	expect(near(invoice.items[0].stock_qty, 1, 6), f"invoice pieces {invoice.items[0].stock_qty}")
+
+	credit = frappe.get_doc(make_sales_return(invoice.name))
+	expect(credit.is_return and credit.return_against == invoice.name, "credit note is not linked to the invoice")
+	credit.insert(ignore_permissions=True)
+	credit.submit()
+	expect(credit.items[0].item_code == spec.final_item_code and flt(credit.items[0].qty) < 0, "return line was changed")
+
+	ordinary = frappe.new_doc("Sales Invoice")
+	ordinary.company = COMPANY
+	ordinary.customer = "GFV Customer"
+	ordinary.update_stock = 0
+	ordinary.append(
+		"items",
+		{"item_code": _ordinary_item("GFV-ORDINARY"), "qty": 1, "rate": 10},
+	)
+	ordinary.insert(ignore_permissions=True)
+	ordinary.submit()
+	expect(ordinary.items[0].item_code == "GFV-ORDINARY" and not ordinary.items[0].get("gf_is_glass_item"), "ordinary line was treated as glass")
+
+	raw_refused = _sell_attempt("Sales Invoice", v.RAW, update_stock=0)
+	cut_item = spec.cut_wip_item_code
+	cut_refused = _sell_attempt("Sales Invoice", cut_item, update_stock=0)
+	expect("cannot use" in raw_refused.lower() and "raw sheet" in raw_refused.lower(), raw_refused[:240])
+	expect("cannot use" in cut_refused.lower() and "cut wip" in cut_refused.lower(), cut_refused[:240])
+	frappe.db.commit()
+	result = {
+		"delivery_note": dn.name,
+		"sales_invoice": invoice.name,
+		"invoice_qty_m2": flt(invoice.items[0].qty, 6),
+		"invoice_pieces": flt(invoice.items[0].stock_qty, 6),
+		"credit_note": credit.name,
+		"ordinary_invoice": ordinary.name,
+		"raw_sheet_invoice": raw_refused[:180],
+		"cut_wip_invoice": cut_refused[:180],
+	}
+	EVIDENCE["sales_invoice_commercial_lines"] = result
+	return json.dumps(result)
 
 
 def leave_billing_precision_at_six() -> str:

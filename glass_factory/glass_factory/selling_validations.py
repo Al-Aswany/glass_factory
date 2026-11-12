@@ -79,7 +79,15 @@ def validate_delivery_note(doc, method=None):
 	The same limits apply to a Sales Invoice with Update Stock, which delivers glass without a
 	Delivery Note. Otherwise it could hand over pieces that were never processed for the order,
 	for example another order's stock of the same finished Item.
+
+	Every Sales Invoice, including one that does not update stock and a credit note, is also
+	refused when a line is a raw sheet, Cut WIP, remnant, or scrap. Finished goods invoiced
+	from a Delivery Note, ordinary items, and returns of those finished goods stay allowed.
 	"""
+	if doc.doctype == "Sales Invoice":
+		for row in doc.get("items") or []:
+			_reject_non_commercial_item(row, "Sales Invoice")
+
 	if not _delivers_stock(doc):
 		return
 	label = doc.doctype

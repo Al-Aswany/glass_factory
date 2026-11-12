@@ -7,13 +7,39 @@ from frappe.utils import flt
 from glass_factory.glass_factory.item_resolver import build_glass_item_code, build_glass_operation_code
 
 
+RAW_FIXTURE = "GLS-CLEAR-8MM-3210X2250"
+
+
+def _ensure_raw_fixture() -> None:
+	"""Create the raw sheet this module links to. The suite must not depend on a preloaded sample item.
+
+	Raw sheets are batch-tracked, matching the items the specification generator creates.
+	"""
+	if frappe.db.exists("Item", RAW_FIXTURE):
+		if not frappe.db.get_value("Item", RAW_FIXTURE, "has_batch_no"):
+			frappe.db.set_value("Item", RAW_FIXTURE, "has_batch_no", 1, update_modified=False)
+		if frappe.db.get_value("Item", RAW_FIXTURE, "gf_glass_item_role") != "Raw Sheet":
+			frappe.db.set_value("Item", RAW_FIXTURE, "gf_glass_item_role", "Raw Sheet", update_modified=False)
+		return
+	item = frappe.new_doc("Item")
+	item.item_code = item.item_name = RAW_FIXTURE
+	item.item_group = "All Item Groups"
+	item.stock_uom = "Nos"
+	item.is_stock_item = 1
+	item.is_purchase_item = 1
+	item.is_sales_item = 0
+	item.has_batch_no = 1
+	item.gf_glass_item_role = "Raw Sheet"
+	item.insert(ignore_permissions=True)
+
+
 def _base_spec_kwargs(**overrides):
 	values = {
 		"glass_type": "CLEAR",
 		"thickness_mm": 8,
 		"length_mm": 1200,
 		"width_mm": 800,
-		"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
+		"raw_sheet_item": RAW_FIXTURE,
 	}
 	values.update(overrides)
 	return values
@@ -82,6 +108,13 @@ class TestBuildGlassItemCode(unittest.TestCase):
 
 
 class TestGlassProductSpecification(IntegrationTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.set_user("Administrator")
+		_ensure_raw_fixture()
+		frappe.db.commit()
+
 	def test_creates_valid_specification(self):
 		doc = _new_spec(specification_title="Test Spec")
 		doc.insert()

@@ -5,11 +5,12 @@ import frappe
 from frappe.utils import flt
 
 from glass_factory.glass_factory.piece_pricing import (
-	apply_piece_rates,
-	calculate_piece_rates,
 	chargeable_area_m2,
+	get_buying_price_list,
 	get_glass_rate_per_m2,
 	get_item_buying_rate,
+	get_item_selling_rate,
+	get_raw_glass_selling_rate_per_m2,
 )
 
 
@@ -28,62 +29,39 @@ class TestPiecePricing(unittest.TestCase):
 		):
 			self.assertEqual(chargeable_area_m2(1000, 1000), flt(1.0, 6))
 
-	def test_calculate_piece_rates_combines_glass_and_processing(self):
-		piece = {
-			"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
-			"length_mm": 1000,
-			"width_mm": 800,
-			"process_polish": 1,
-			"process_temper": 1,
-		}
+	def test_raw_selling_rate_reads_the_area_uom_price(self):
 		with patch(
-			"glass_factory.glass_factory.piece_pricing.get_glass_rate_per_m2",
-			return_value=100,
+			"glass_factory.glass_factory.settings_validation.get_area_uom",
+			return_value="Square Meter",
 		), patch(
-			"glass_factory.glass_factory.piece_pricing._get_processing_rate_settings",
-			return_value={
-				"polish_rate_per_m2": 20,
-				"bevel_rate_per_m2": 0,
-				"holes_rate_per_m2": 0,
-				"slots_rate_per_m2": 0,
-				"temper_rate_per_m2": 30,
-				"sandblast_rate_per_m2": 0,
-				"laminate_rate_per_m2": 0,
-			},
-		), patch(
-			"glass_factory.glass_factory.piece_pricing.chargeable_area_m2",
-			return_value=0.8,
-		):
-			rates = calculate_piece_rates(piece)
+			"glass_factory.glass_factory.piece_pricing.frappe.db.get_value",
+			return_value=80,
+		) as get_value:
+			rate = get_raw_glass_selling_rate_per_m2("GLS-CLEAR-8MM-3210X2250", "Standard Selling", currency="TZS")
 
-		self.assertEqual(rates["glass_rate"], 80)
-		self.assertEqual(rates["polish_rate"], 16)
-		self.assertEqual(rates["temper_rate"], 24)
-		self.assertEqual(rates["processing_rate"], 40)
-		self.assertEqual(rates["rate"], 120)
+		self.assertEqual(rate, 80)
+		filters = get_value.call_args.args[1]
+		self.assertEqual(filters["uom"], "Square Meter")
+		self.assertEqual(filters["selling"], 1)
+		self.assertEqual(filters["currency"], "TZS")
 
-	def test_calculate_piece_rates_accepts_child_document(self):
-		doc = frappe.new_doc("Quotation")
-		doc.append(
-			"glass_pieces",
-			{
-				"raw_sheet_item": "GLS-CLEAR-8MM-3210X2250",
-				"length_mm": 1000,
-				"width_mm": 800,
-				"qty": 1,
-			},
-		)
-		piece = doc.glass_pieces[0]
-
+	def test_item_selling_rate_uses_the_selling_price_list(self):
 		with patch(
-			"glass_factory.glass_factory.piece_pricing.get_glass_rate_per_m2",
-			return_value=0,
-		):
-			rates = calculate_piece_rates(piece)
-			updated = apply_piece_rates(piece)
+			"glass_factory.glass_factory.piece_pricing.frappe.db.get_value",
+			return_value=45,
+		) as get_value:
+			rate = get_item_selling_rate("GFV-ORDINARY", "Standard Selling")
 
-		self.assertIn("rate", rates)
-		self.assertIn("rate", updated)
+		self.assertEqual(rate, 45)
+		self.assertEqual(get_value.call_args.args[0], "Item Price")
+		self.assertEqual(get_value.call_args.args[1]["selling"], 1)
+
+	def test_buying_price_list_prefers_the_company_list(self):
+		with patch(
+			"glass_factory.glass_factory.piece_pricing.frappe.get_cached_value",
+			return_value="Company Buying",
+		):
+			self.assertEqual(get_buying_price_list("Other Glass Co"), "Company Buying")
 
 	def test_get_glass_rate_per_m2_prorates_full_sheet_price(self):
 		with patch(

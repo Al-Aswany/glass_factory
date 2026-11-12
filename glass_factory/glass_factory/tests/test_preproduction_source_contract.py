@@ -42,6 +42,9 @@ class TestPreproductionSourceContract(unittest.TestCase):
 		selling = _source("selling_validations.py")
 		self.assertIn("def _delivers_stock", selling)
 		self.assertIn('doc.get("update_stock")', selling)
+		invoice_guard = selling.split("def validate_delivery_note", 1)[1].split("if not _delivers_stock", 1)[0]
+		self.assertIn('doc.doctype == "Sales Invoice"', invoice_guard)
+		self.assertIn("_reject_non_commercial_item", invoice_guard)
 
 	def test_capitalization_checks_the_valuation_account_and_a_specified_cost_rate(self):
 		posting = _source("stock_posting.py")
