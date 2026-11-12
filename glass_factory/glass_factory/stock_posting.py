@@ -14,16 +14,27 @@ from glass_factory.glass_factory.glass_stock_entry_types import (
 )
 from glass_factory.glass_factory.spec_production import stock_entry_trace_fields
 from glass_factory.glass_factory.item_resolver import (
-	_parse_raw_item_code,
 	ensure_remnant_item,
 	get_scrap_item,
 	item_role,
 )
 from glass_factory.glass_factory.processing_cost import (
-	compute_processing_job_internal_cost,
+	compute_processing_job_line_costs,
+	missing_operation_cost_rates,
 	validate_processing_cost_expense_account,
 )
-from glass_factory.glass_factory.settings_validation import get_validated_stock_settings
+from glass_factory.glass_factory.settings_validation import (
+	assert_operating_company,
+	get_operating_company,
+	get_validated_stock_settings,
+)
+from glass_factory.glass_factory.stock_valuation import (
+	PROCESSING_COST_FIELD,
+	allocate_cutting_rates,
+	finished_rows,
+	item_area_m2,
+	split_value,
+)
 
 
 def build_cutting_repack(cutting_job):
@@ -412,8 +423,8 @@ def _company_from_job(cutting_job):
 		if row.sales_order:
 			company = frappe.db.get_value("Sales Order", row.sales_order, "company")
 			if company:
-				return company
-	return frappe.defaults.get_user_default("Company") or frappe.db.get_value("Company", {"is_group": 0}, "name")
+				return assert_operating_company(company, context=f"Sales Order {row.sales_order}")
+	return _operating_company_or_throw()
 
 
 def _company_from_processing_job(processing_job):
@@ -421,8 +432,15 @@ def _company_from_processing_job(processing_job):
 		if row.sales_order:
 			company = frappe.db.get_value("Sales Order", row.sales_order, "company")
 			if company:
-				return company
-	return frappe.defaults.get_user_default("Company") or frappe.db.get_value("Company", {"is_group": 0}, "name")
+				return assert_operating_company(company, context=f"Sales Order {row.sales_order}")
+	return _operating_company_or_throw()
+
+
+def _operating_company_or_throw() -> str:
+	company = get_operating_company()
+	if not company:
+		frappe.throw("Glass Factory has no Operating Company. Set it in Glass Factory Settings.")
+	return company
 
 
 def _stock_uom(item_code):
@@ -430,10 +448,7 @@ def _stock_uom(item_code):
 
 
 def _item_area_m2(item_code: str) -> float:
-	parsed = _parse_raw_item_code(item_code)
-	if not parsed:
-		return 0
-	return flt(parsed["length_mm"]) * flt(parsed["width_mm"]) / 1_000_000
+	return item_area_m2(item_code)
 
 
 def _source_row_rate(se, row) -> float:
@@ -481,83 +496,25 @@ def _total_source_cost(se) -> float:
 		if rate <= 0:
 			frappe.throw(
 				f"Stock Entry row {row.idx}: valuation rate is missing for Item {row.item_code} "
-				f"in warehouse {row.s_warehouse}. Receive raw stock or set valuation before posting the cutting stock movement."
+				f"in warehouse {row.s_warehouse}. Receive stock or set valuation before posting this glass stock movement."
 			)
 		total_source_cost += flt(row.transfer_qty) * rate
 	return total_source_cost
 
 
 def _allocate_cutting_repack_rates(se, cutting_job) -> None:
-	"""Spread consumed source material value across finished rows by glass area."""
-	scrap_item = get_scrap_item()
-	piece_rate_overrides = {
+	"""Give a newly built Repack #1 its first rates from the source stock ledger.
+
+	``GlassStockEntryMixin`` repeats this from the consumed rows whenever ERPNext recalculates
+	the entry, so the rates also follow a later Landed Cost Voucher on the source receipt.
+	"""
+	overrides = {
 		piece.cut_wip_item: flt(piece.get("basic_rate"))
 		for piece in cutting_job.get("pieces") or []
 		if piece.cut_wip_item and flt(piece.get("basic_rate")) > 0
 	}
-	total_source_cost = _total_source_cost(se)
-
-	finished_rows = [row for row in se.items if row.t_warehouse and not row.s_warehouse and row.is_finished_item]
-	scrap_rows = [row for row in finished_rows if row.item_code == scrap_item]
-	allocatable = [row for row in finished_rows if row.item_code != scrap_item]
-
-	if not allocatable:
-		frappe.throw("Cutting stock movement has no finished rows to receive source material value.")
-
-	unique_allocatable = {row.item_code for row in allocatable}
-	if len(unique_allocatable) == 1 and not scrap_rows and not piece_rate_overrides:
-		# ERPNext repack can auto-derive the finished rate from outgoing material cost.
-		return
-
-	override_cost = 0.0
-	auto_rows = []
-	for row in allocatable:
-		override_rate = flt(piece_rate_overrides.get(row.item_code))
-		if override_rate > 0:
-			row.basic_rate = override_rate
-			row.set_basic_rate_manually = 1
-			override_cost += flt(row.transfer_qty) * override_rate
-			continue
-		auto_rows.append(row)
-
-	remaining_cost = total_source_cost - override_cost
-	if remaining_cost < 0:
-		frappe.throw("Cut WIP basic rates exceed consumed source material value.")
-
-	weights = [_finished_row_weight(row) for row in auto_rows]
-	total_weight = sum(weights)
-
-	for row in auto_rows:
-		qty = flt(row.transfer_qty)
-		if qty <= 0:
-			continue
-
-		if total_weight > 0:
-			weight = _finished_row_weight(row)
-			share = weight / total_weight
-		else:
-			total_qty = sum(flt(item.transfer_qty) for item in auto_rows)
-			share = qty / total_qty if total_qty else 0
-
-		row.basic_rate = flt((remaining_cost * share) / qty)
-		if row.basic_rate <= 0:
-			frappe.throw(
-				f"Stock Entry row {row.idx}: could not derive a valuation rate for {row.item_code}. "
-				"Check source stock valuation and finished quantities."
-			)
-		row.set_basic_rate_manually = 1
-
-	for row in scrap_rows:
-		row.basic_rate = 0
-		row.allow_zero_valuation_rate = 1
-		row.set_basic_rate_manually = 1
-
+	allocate_cutting_rates(se, _total_source_cost(se), overrides)
 	_sync_manual_row_amounts(se)
-
-
-def _finished_row_weight(row) -> float:
-	area_m2 = _item_area_m2(row.item_code)
-	return flt(row.transfer_qty) * (area_m2 if area_m2 > 0 else 1)
 
 
 def _glass_factory_settings():
@@ -565,19 +522,52 @@ def _glass_factory_settings():
 
 
 def _apply_processing_cost_capitalization(se, processing_job) -> None:
-	"""Add Repack #2 additional costs when internal processing cost capitalization is enabled."""
+	"""Add Repack #2 additional costs when internal processing cost capitalization is enabled.
+
+	The cost of the operations on a Sales Order row is recorded on that row's finished rows, so
+	ERPNext adds it to those rows only instead of sharing one pool in proportion to material value.
+	"""
 	settings = _glass_factory_settings()
 	se.set("additional_costs", [])
 
 	if not cint(settings.get("capitalize_processing_costs")):
 		return
 
-	processing_cost = compute_processing_job_internal_cost(processing_job, se.company)
+	# A seeded cost rate of 0 must not be posted as a real zero. Say which operations are missing
+	# before the stock entry exists, including when every missing rate would have added nothing.
+	missing = missing_operation_cost_rates(processing_job, se.company)
+	if missing:
+		frappe.throw(
+			"Processing cost capitalization is on, but these operations have no confirmed cost rate: "
+			+ ", ".join(missing)
+			+ ". A cost rate of 0 with Cost Rate Set unticked is the seeded default, not an intentional zero. "
+			"Open Glass Factory Settings, enter the cost rate, and tick Cost Rate Set "
+			"(tick it with 0 only when the operation really costs nothing). "
+			"The stock movement was not posted.",
+			title="Missing Operation Cost Rate",
+		)
+
+	line_costs = compute_processing_job_line_costs(processing_job, se.company)
+	processing_cost = flt(sum(line_costs.values()), 2)
 	if processing_cost <= 0:
 		return
 
-	expense_account = validate_processing_cost_expense_account(settings, processing_cost)
+	expense_account = validate_processing_cost_expense_account(settings, processing_cost, company=se.company)
 	company_currency = frappe.get_cached_value("Company", se.company, "default_currency") or "USD"
+
+	rows_by_line: dict[str, list] = {}
+	for row in finished_rows(se):
+		rows_by_line.setdefault(row.get("gf_sales_order_item") or "", []).append(row)
+	for line, cost in line_costs.items():
+		rows = rows_by_line.get(line) or []
+		if not rows:
+			frappe.throw(
+				f"Processing cost of {flt(cost, 2)} is recorded for Sales Order row {line}, "
+				"but the final stock movement has no finished row for it."
+			)
+		shares = split_value(flt(cost, 2), rows, [flt(row.transfer_qty) for row in rows])
+		for row, share in zip(rows, shares, strict=True):
+			row.set(PROCESSING_COST_FIELD, share)
 
 	se.append(
 		"additional_costs",

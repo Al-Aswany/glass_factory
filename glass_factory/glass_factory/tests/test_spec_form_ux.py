@@ -258,11 +258,11 @@ class TestSpecWorkflowIntegration(IntegrationTestCase):
 	def test_manual_verification_pricing_totals(self):
 		"""800×1200 qty 1 with Polish, Bevel, Sandblast, 2 holes, 1 slot."""
 		manual_rates = [
-			{"operation": "Polish", "currency": "USD", "pricing_basis": "Per Edge Meter", "rate": 80, "enabled": 1},
-			{"operation": "Bevel", "currency": "USD", "pricing_basis": "Per Edge Meter", "rate": 50, "enabled": 1},
-			{"operation": "Hole", "currency": "USD", "pricing_basis": "Per Unit", "rate": 2, "enabled": 1},
-			{"operation": "Slot", "currency": "USD", "pricing_basis": "Per Unit", "rate": 1.5, "enabled": 1},
-			{"operation": "Sandblast", "currency": "USD", "pricing_basis": "Per Square Meter", "rate": 143.229167, "enabled": 1},
+			{"operation": "Polish", "currency": "USD", "pricing_basis": "Per Edge Meter", "rate": 80, "cost_rate": 80, "enabled": 1},
+			{"operation": "Bevel", "currency": "USD", "pricing_basis": "Per Edge Meter", "rate": 50, "cost_rate": 50, "enabled": 1},
+			{"operation": "Hole", "currency": "USD", "pricing_basis": "Per Unit", "rate": 2, "cost_rate": 2, "enabled": 1},
+			{"operation": "Slot", "currency": "USD", "pricing_basis": "Per Unit", "rate": 1.5, "cost_rate": 1.5, "enabled": 1},
+			{"operation": "Sandblast", "currency": "USD", "pricing_basis": "Per Square Meter", "rate": 143.229167, "cost_rate": 143.229167, "enabled": 1},
 		]
 		_set_operation_rates(manual_rates)
 		buying_rate = flt((999 * (1 - 0.204) - 663) / 0.96 * 7.2225, 2)

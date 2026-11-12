@@ -51,6 +51,7 @@
   "column_break_pricing_summary_3",
   "rate_per_piece",
   "amount",
+  "processing_cost_per_piece",
   "estimated_cost_per_piece",
   "column_break_pricing_summary_4",
   "gross_profit_per_piece",
@@ -404,10 +405,22 @@
    "read_only": 1
   },
   {
+   "description": "Sum of the operation rows' internal cost amounts.",
+   "fieldname": "processing_cost_per_piece",
+   "fieldtype": "Currency",
+   "label": "Internal Processing Cost / Piece",
+   "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "estimated_cost_per_piece",
    "fieldtype": "Currency",
    "label": "Estimated Cost / Piece",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1
   },
   {
@@ -419,13 +432,17 @@
    "fieldtype": "Currency",
    "label": "Profit / Piece",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1
   },
   {
    "fieldname": "gross_profit_percent",
    "fieldtype": "Float",
    "label": "Profit %",
+   "permlevel": 1,
    "precision": "2",
+   "print_hide": 1,
    "read_only": 1
   },
   {
@@ -433,6 +450,8 @@
    "fieldtype": "Currency",
    "label": "Total Margin",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1
   },
   {
@@ -445,6 +464,8 @@
    "fieldtype": "Currency",
    "label": "Buying Cost / Sheet",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1,
    "read_only_depends_on": "eval:doc.docstatus==1"
   },
@@ -453,6 +474,8 @@
    "fieldtype": "Currency",
    "label": "Buying Cost / m\u00b2",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1,
    "read_only_depends_on": "eval:doc.docstatus==1"
   },
@@ -473,6 +496,8 @@
    "fieldtype": "Currency",
    "label": "Raw Cost / Finished Piece",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1,
    "read_only_depends_on": "eval:doc.docstatus==1"
   },
@@ -664,6 +689,8 @@
    "fieldtype": "Currency",
    "label": "Profit / m\u00b2",
    "options": "currency",
+   "permlevel": 1,
+   "print_hide": 1,
    "read_only": 1
   },
   {
@@ -723,7 +750,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-07-06 05:11:17.303609",
+ "modified": "2026-11-11 03:30:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Product Specification",
@@ -775,6 +802,24 @@
    "read": 1,
    "role": "Glass Cutting Operator",
    "share": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Glass Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Glass Production Planner",
+   "write": 1
   }
  ],
  "row_format": "Dynamic",

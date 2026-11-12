@@ -46,6 +46,7 @@ _SCRAP_ITEM = f"{_PFX}-Scrap"
 
 # Glass Factory Settings fields that will be temporarily replaced
 _SETTINGS_SCALAR_FIELDS = (
+    "company",
     "raw_warehouse", "cut_wip_warehouse", "final_goods_warehouse",
     "remnants_warehouse", "scrap_warehouse",
     "raw_item_group", "cut_wip_item_group", "final_item_group",
@@ -319,6 +320,7 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
         ]
 
         # Apply E2E values
+        settings.company                    = cls.company
         settings.raw_warehouse              = cls.raw_wh
         settings.cut_wip_warehouse          = cls.cutwip_wh
         settings.final_goods_warehouse      = cls.final_wh
@@ -525,9 +527,13 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
             "Cut WIP item must never appear as a sold item")
 
         # Quantities and rates
-        self.assertAlmostEqual(flt(soi.qty),  2.0, places=2, msg="SO qty must be 2")
-        self.assertAlmostEqual(flt(soi.rate), flt(spec.rate_per_piece), places=2,
-            msg="SO rate must equal spec.rate_per_piece")
+        # Sold by area: 2 pieces of 0.96 m² each; stock and production stay in pieces.
+        self.assertEqual(soi.uom, "Square Meter")
+        self.assertEqual(soi.stock_uom, "Nos")
+        self.assertAlmostEqual(flt(soi.qty), 1.92, places=6, msg="SO qty must be the total area")
+        self.assertAlmostEqual(flt(soi.stock_qty), 2.0, places=6, msg="SO stock qty must be 2 pieces")
+        self.assertAlmostEqual(flt(soi.rate), flt(spec.selling_rate_per_m2), places=6,
+            msg="SO rate must equal spec.selling_rate_per_m2")
 
         # Glass-factory metadata on the SO item
         self.assertEqual(cint(soi.gf_from_glass_specification), 1,
@@ -680,6 +686,7 @@ class TestSpecE2ESubmittedFlow(IntegrationTestCase):
         self.assertGreater(flt(soi_after.gf_processed_qty), 0,
             "gf_processed_qty must be > 0 after Repack #2 — delivery is now allowed")
 
+        pj.reload()  # posting the final movement moved the job to Final Stock Posted in the database
         pj.complete_job()
         pj.reload()
         self.assertEqual(pj.status, "Completed", "Processing Job must reach Completed status")

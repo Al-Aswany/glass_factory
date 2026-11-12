@@ -4,8 +4,18 @@ from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
+from glass_factory.glass_factory.authorization import require_doc_permission, require_stock_movement_authority
+from glass_factory.glass_factory.selling_uom import sales_order_item_pieces
+from glass_factory.glass_factory.stock_movements import (
+	PROCESSING_FLOW,
+	assert_job_cancel_allowed,
+	clear_cancelled_link,
+	guard_linked_movement,
+	lock_job,
+	mark_posted_after_submit,
+)
 from glass_factory.glass_factory.stock_posting import build_processing_repack
 
 OPERATION_LABELS = {
@@ -25,41 +35,70 @@ class GlassProcessingJob(Document):
 	def validate(self):
 		self._validate_inputs_outputs()
 
+	def before_cancel(self):
+		assert_job_cancel_allowed(self)
+
 	@frappe.whitelist()
 	def create_repack_stock_entry(self):
 		if self.docstatus != 1:
 			frappe.throw("Submit the Processing Job before creating a final stock movement.")
 		self._validate_operations_completed()
-		if self.linked_stock_entry:
-			return {"stock_entry": self.linked_stock_entry}
-		se = build_processing_repack(self)
+		require_stock_movement_authority(self, PROCESSING_FLOW)
+		locked = lock_job(self.doctype, self.name)
+		linked = guard_linked_movement(locked, flow=PROCESSING_FLOW)
+		if linked:
+			return {"stock_entry": linked, "message": "Existing final stock movement kept."}
+		se = build_processing_repack(locked)
 		se.insert(ignore_permissions=True)
-		self.linked_stock_entry = se.name
-		self.status = "Processing In Progress"
-		self.save(ignore_permissions=True)
+		locked.db_set("linked_stock_entry", se.name)
+		if locked.status != "Final Stock Posted":
+			locked.db_set("status", "Processing In Progress")
+		self.reload()  # the job was changed through the locked copy; hand the caller the committed state
 		return {"message": "Draft final stock movement created.", "stock_entry": se.name}
 
 	@frappe.whitelist()
 	def submit_repack_stock_entry(self):
+		if self.docstatus != 1:
+			frappe.throw("Submit the Processing Job before posting a final stock movement.")
 		self._validate_operations_completed()
-		if not self.linked_stock_entry:
+		require_stock_movement_authority(self, PROCESSING_FLOW)
+		locked = lock_job(self.doctype, self.name)
+		if not locked.linked_stock_entry:
 			self.create_repack_stock_entry()
-		se = frappe.get_doc("Stock Entry", self.linked_stock_entry)
+			locked = lock_job(self.doctype, self.name)
+		linked = guard_linked_movement(locked, flow=PROCESSING_FLOW)
+		se = frappe.get_doc("Stock Entry", linked)
 		if se.docstatus == 0:
 			se.submit()
-		self.status = "Final Stock Posted"
-		for row in self.outputs:
-			self._update_so_item(row.sales_order_item, {
-				"gf_processing_job": self.name,
-				"gf_processed_qty": flt(row.qty),
-			})
-		self.save(ignore_permissions=True)
+			se.reload()
+		if se.docstatus != 1:
+			frappe.throw(
+				f"Stock Entry {se.name} is not submitted, so the Processing Job was not marked as posted."
+			)
+		for row in locked.get("outputs") or []:
+			if row.sales_order_item:
+				self._update_so_item(row.sales_order_item, {"gf_processing_job": locked.name})
+		mark_posted_after_submit(locked, se.name)
+		self.reload()  # the job was changed through the locked copy; hand the caller the committed state
 		return {"message": "Final stock movement submitted.", "stock_entry": se.name}
+
+	@frappe.whitelist()
+	def recover_cancelled_stock_movement(self):
+		"""Clear a cancelled movement link. Does not create a replacement Stock Entry."""
+		cancelled_name = clear_cancelled_link(self, flow=PROCESSING_FLOW)
+		return {
+			"message": (
+				f"Cancelled Stock Entry {cancelled_name} was unlinked. "
+				"Create a new final stock movement when you are ready to post again."
+			),
+			"stock_entry": cancelled_name,
+		}
 
 	@frappe.whitelist()
 	def complete_job(self):
 		if self.status != "Final Stock Posted":
 			frappe.throw("Submit the final stock movement before completing the Processing Job.")
+		require_doc_permission(self, "write")
 		self.status = "Completed"
 		self.save(ignore_permissions=True)
 		return {"message": "Glass Processing Job completed."}
@@ -82,12 +121,15 @@ class GlassProcessingJob(Document):
 			return self.create_repack_stock_entry()
 		if action == "submit_final_stock_movement":
 			return self.submit_repack_stock_entry()
+		if action == "recover_cancelled_movement":
+			return self.recover_cancelled_stock_movement()
 		if action == "complete_job":
 			return self.complete_job()
 
 		frappe.throw("Unsupported Processing Job action.")
 
 	def _set_operation_status(self, row_name: str, status: str):
+		require_doc_permission(self, "write")
 		for row in self.operations:
 			if row.name != row_name:
 				continue
@@ -105,13 +147,16 @@ class GlassProcessingJob(Document):
 			so_item = frappe.db.get_value(
 				"Sales Order Item",
 				row.sales_order_item,
-				["item_code", "gf_final_item", "qty"],
+				["item_code", "gf_final_item"],
 				as_dict=True,
 			)
 			if so_item and row.final_item != (so_item.gf_final_item or so_item.item_code):
 				frappe.throw(f"Output row {row.idx}: final Item must match Sales Order Item.")
 			output_by_so_item[row.sales_order_item] = output_by_so_item.get(row.sales_order_item, 0) + flt(row.qty)
-			if so_item and output_by_so_item[row.sales_order_item] > flt(so_item.qty):
+			# Output is a piece count; the Sales Order row may be sold in m², so compare in pieces.
+			if so_item and flt(output_by_so_item[row.sales_order_item], 3) > flt(
+				sales_order_item_pieces(row.sales_order_item), 3
+			):
 				frappe.throw(f"Output row {row.idx}: output quantity exceeds Sales Order quantity.")
 
 		input_by_so_item = {}
@@ -149,9 +194,27 @@ def get_valid_actions_for_doc(doc) -> list[dict[str, str]]:
 
 	if not doc.get("linked_stock_entry"):
 		return [{"action": "create_final_stock_movement", "label": "Create Final Stock Movement"}]
+	if _movement_state(doc) == 2:
+		return [{"action": "recover_cancelled_movement", "label": "Recover Cancelled Movement"}]
 	if doc.status != "Final Stock Posted":
 		return [{"action": "submit_final_stock_movement", "label": "Submit Final Stock Movement"}]
 	return [{"action": "complete_job", "label": "Complete Job"}]
+
+
+def _movement_state(doc) -> int | None:
+	"""Docstatus of the linked movement. Unsaved test docs are treated as drafts."""
+	explicit = doc.get("_movement_docstatus") if hasattr(doc, "get") else None
+	if explicit not in (None, ""):
+		return cint(explicit)
+	linked = doc.get("linked_stock_entry") if hasattr(doc, "get") else None
+	if not linked:
+		return None
+	if doc.get("doctype") != "Glass Processing Job" or not doc.get("name"):
+		return 0
+	value = frappe.db.get_value("Stock Entry", linked, "docstatus")
+	if value is None:
+		return 0
+	return cint(value)
 
 
 def _operation_label(operation_row) -> str:

@@ -9,6 +9,7 @@ from erpnext.stock.doctype.item.item import get_item_defaults
 
 from glass_factory.glass_factory.glass_stock_entry_types import GLASS_REPACK_STOCK_ENTRY_TYPES
 from glass_factory.glass_factory.item_resolver import item_role, resolve_row_items, validate_final_item_matches_row
+from glass_factory.glass_factory.selling_uom import delivered_pieces, row_pieces
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 from glass_factory.glass_factory.spec_transaction import SPEC_TRANSACTION_ROW_FIELDS, is_spec_transaction_row
 
@@ -40,6 +41,8 @@ def resolve_glass_items(doc, method=None):
 	for row in doc.get("items") or []:
 		if is_spec_transaction_row(row):
 			_reject_non_commercial_item(row, doc.doctype)
+			# A Sales Order made from a Quotation has no delivery warehouse on its rows yet.
+			_ensure_glass_row_warehouse(doc, row)
 			continue
 		if cint(row.get("gf_is_glass_item")):
 			if flt(row.qty) <= 0:
@@ -63,10 +66,24 @@ def validate_glass_selling_document(doc, method=None):
 		validate_final_item_matches_row(row)
 
 
+def _delivers_stock(doc) -> bool:
+	"""A Delivery Note, or a Sales Invoice that updates stock itself, hands glass to the customer."""
+	if doc.doctype == "Delivery Note":
+		return True
+	return doc.doctype == "Sales Invoice" and bool(cint(doc.get("update_stock")))
+
+
 def validate_delivery_note(doc, method=None):
-	"""Delivery must preserve Sales Order final Item links for glass rows."""
-	if doc.doctype != "Delivery Note":
+	"""Delivery must preserve Sales Order final Item links for glass rows.
+
+	The same limits apply to a Sales Invoice with Update Stock, which delivers glass without a
+	Delivery Note. Otherwise it could hand over pieces that were never processed for the order,
+	for example another order's stock of the same finished Item.
+	"""
+	if not _delivers_stock(doc):
 		return
+	label = doc.doctype
+	is_invoice = doc.doctype == "Sales Invoice"
 
 	for row in doc.get("items") or []:
 		is_glass = cint(row.get("gf_is_glass_item"))
@@ -80,16 +97,17 @@ def validate_delivery_note(doc, method=None):
 			if so_flags:
 				is_glass = cint(so_flags.gf_is_glass_item) or cint(so_flags.gf_from_glass_specification)
 			if is_glass:
-				row.gf_is_glass_item = 1
-				if cint(so_flags.gf_from_glass_specification):
-					row.gf_from_glass_specification = 1
+				if not is_invoice:
+					row.gf_is_glass_item = 1
+					if cint(so_flags.gf_from_glass_specification):
+						row.gf_from_glass_specification = 1
 
 		if not is_glass:
-			_reject_non_commercial_item(row, "Delivery Note")
+			_reject_non_commercial_item(row, label)
 			continue
 
-		if not row.get("against_sales_order") or not row.get("so_detail"):
-			frappe.throw(f"Delivery Note row {row.idx}: glass delivery must be created from a Sales Order.")
+		if not (row.get("against_sales_order") or row.get("sales_order")) or not row.get("so_detail"):
+			frappe.throw(f"{label} row {row.idx}: glass delivery must be created from a Sales Order.")
 
 		so_values = frappe.db.get_value(
 			"Sales Order Item",
@@ -108,36 +126,42 @@ def validate_delivery_note(doc, method=None):
 			as_dict=True,
 		)
 		if not so_values:
-			frappe.throw(f"Delivery Note row {row.idx}: linked Sales Order Item was not found.")
+			frappe.throw(f"{label} row {row.idx}: linked Sales Order Item was not found.")
 
 		final_item = so_values.gf_final_item or so_values.item_code
 		if row.item_code != final_item:
 			frappe.throw(
-				f"Delivery Note row {row.idx}: glass delivery Item must be the Sales Order final Item {final_item}."
+				f"{label} row {row.idx}: glass delivery Item must be the Sales Order final Item {final_item}."
 			)
 		if item_role(row.item_code) != "Final":
-			frappe.throw(f"Delivery Note row {row.idx}: only final glass Items can be delivered.")
+			frappe.throw(f"{label} row {row.idx}: only final glass Items can be delivered.")
 
+		# Produced and delivered limits are piece counts. The row quantity may be square metres,
+		# so compare through stock_qty (pieces) on both sides.
 		processed_qty = flt(so_values.gf_processed_qty)
 		if processed_qty <= 0:
 			frappe.throw(
-				f"Delivery Note row {row.idx}: glass must be processed before delivery."
+				f"{label} row {row.idx}: glass must be processed before delivery."
 			)
 
-		total_dn_qty = sum(
-			flt(dn_row.qty)
+		if cint(doc.get("is_return")):
+			continue
+
+		pieces_in_this_note = sum(
+			row_pieces(dn_row)
 			for dn_row in doc.items
 			if dn_row.so_detail == row.so_detail and flt(dn_row.qty) > 0
 		)
-		already_delivered = flt(so_values.delivered_qty)
-		if doc.docstatus == 1:
-			already_delivered = max(0, already_delivered - total_dn_qty)
-		if already_delivered + total_dn_qty > processed_qty:
+		already_delivered = delivered_pieces(row.so_detail, exclude_parent=doc.get("name"))
+		if flt(already_delivered + pieces_in_this_note, 3) > flt(processed_qty, 3):
 			frappe.throw(
-				f"Delivery Note row {row.idx}: delivered quantity cannot exceed processed quantity "
-				f"({processed_qty})."
+				f"{label} row {row.idx}: delivering {flt(pieces_in_this_note, 3)} pieces would "
+				f"exceed the processed quantity of {flt(processed_qty, 3)} pieces "
+				f"({flt(already_delivered, 3)} already delivered)."
 			)
 
+		if is_invoice:
+			continue  # Sales Invoice rows carry no glass trace columns; the checks above are what matter
 		row.gf_sales_order_item = row.so_detail
 		row.gf_cutting_job = row.get("gf_cutting_job") or so_values.gf_cutting_job
 		row.gf_processing_job = row.get("gf_processing_job") or so_values.gf_processing_job
@@ -149,8 +173,13 @@ def validate_delivery_note(doc, method=None):
 
 
 def on_delivery_note_submit(doc, method=None):
-	"""Keep glass delivered qty mirror in sync with ERPNext delivered_qty."""
-	if doc.doctype != "Delivery Note":
+	"""Mirror delivered pieces onto the Sales Order row, for a Delivery Note or a Sales Invoice that updates stock.
+
+	ERPNext's delivered_qty is in the selling UOM (m² for glass rows). The glass mirror is
+	always pieces so it compares directly with cut and processed pieces. The same sync runs
+	on cancel so a cancelled delivery gives its pieces back.
+	"""
+	if not _delivers_stock(doc):
 		return
 
 	updated = set()
@@ -164,12 +193,11 @@ def on_delivery_note_submit(doc, method=None):
 			is_glass = cint(frappe.db.get_value("Sales Order Item", row.so_detail, "gf_is_glass_item"))
 		if not is_glass or row.so_detail in updated:
 			continue
-		delivered_qty = flt(frappe.db.get_value("Sales Order Item", row.so_detail, "delivered_qty"))
 		frappe.db.set_value(
 			"Sales Order Item",
 			row.so_detail,
 			"gf_delivered_qty",
-			delivered_qty,
+			delivered_pieces(row.so_detail),
 			update_modified=False,
 		)
 		updated.add(row.so_detail)

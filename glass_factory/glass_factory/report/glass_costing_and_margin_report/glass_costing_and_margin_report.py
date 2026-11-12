@@ -20,6 +20,9 @@ from glass_factory.glass_factory.report.report_utils import (
 
 
 def execute(filters=None):
+	from glass_factory.glass_factory.authorization import require_cost_access
+
+	require_cost_access()
 	filters = filters or {}
 	columns = _columns()
 	data = _data(filters)
@@ -178,7 +181,14 @@ def _operation_pricing_by_spec(spec_names: List[str]) -> Dict[str, List[Dict]]:
 		frappe.qb.from_(child)
 		.inner_join(parent)
 		.on(child.parent == parent.name)
-		.select(parent.name.as_("spec_name"), child.operation, child.pricing_basis, child.quantity)
+		.select(
+			parent.name.as_("spec_name"),
+			child.operation,
+			child.pricing_basis,
+			child.quantity,
+			child.cost_rate,
+			child.cost_amount,
+		)
 		.where(parent.name.isin(spec_names))
 		.run(as_dict=True)
 	)

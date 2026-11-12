@@ -450,18 +450,42 @@ class TestFinalPricingFormulas(unittest.TestCase):
         self.assertEqual(spec.gross_profit_percent, 0)
 
     def test_gross_profit_per_piece(self):
-        """Gross profit = rate_per_piece - estimated_cost."""
+        """Gross profit uses material cost plus internal cost rates, which are zero in this fixture."""
         spec = _make_spec(
             raw_sheet_rate_per_piece=100,
             raw_selling_rate_per_m2=120,
             manual_selling_rate_per_m2=25,
         )
         calculate_spec_pricing(spec)
-        expected_cost = flt(
-            spec.raw_cost_per_finished_piece + spec.processing_amount_per_piece, 2
-        )
+        expected_cost = flt(spec.raw_cost_per_finished_piece, 2)
         expected_profit = flt(spec.rate_per_piece - expected_cost, 2)
+        self.assertAlmostEqual(spec.estimated_cost_per_piece, expected_cost, places=2)
         self.assertAlmostEqual(spec.gross_profit_per_piece, expected_profit, places=2)
+
+    def test_margin_uses_internal_cost_rate_not_selling_rate(self):
+        """A selling-rate override changes the customer price, not estimated cost."""
+        _set_operation_rates(
+            [
+                {
+                    "operation": "Temper",
+                    "currency": "USD",
+                    "pricing_basis": "Per Square Meter",
+                    "rate": 10,
+                    "cost_rate": 4,
+                    "enabled": 1,
+                }
+            ]
+        )
+        try:
+            spec = _make_spec(raw_selling_rate_per_m2=120, temper=1, manual_selling_rate_per_m2=50)
+            calculate_spec_pricing(spec)
+            area = flt(spec.chargeable_area_m2 or spec.area_m2)
+            expected_cost = flt(flt(spec.raw_cost_per_finished_piece) + (area * 4), 2)
+            self.assertAlmostEqual(spec.estimated_cost_per_piece, expected_cost, places=2)
+            self.assertAlmostEqual(spec.processing_amount_per_piece, flt(area * 10, 2), places=2)
+            self.assertNotEqual(flt(spec.estimated_cost_per_piece), flt(spec.raw_cost_per_finished_piece + spec.processing_amount_per_piece, 2))
+        finally:
+            _set_operation_rates(_usd_rates())
 
     def test_total_gross_profit_scales_with_qty(self):
         """total_gross_profit = gross_profit_per_piece × qty."""

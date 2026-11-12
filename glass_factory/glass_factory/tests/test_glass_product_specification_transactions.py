@@ -154,9 +154,17 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 	def _assert_row_matches_spec(self, row, spec):
 		final_item = spec.final_item_code or spec.generated_item
 		self.assertEqual(row.item_code, final_item)
-		self.assertEqual(flt(row.qty), 1)
-		self.assertEqual(flt(row.rate), flt(spec.rate_per_piece))
-		self.assertEqual(flt(row.amount), flt(spec.rate_per_piece, 2))
+		# Sold by area: Qty is total m², Rate is per m², stock quantity stays in pieces.
+		pieces = flt(spec.qty) or 1
+		billed_area = flt(spec.area_m2, 3)  # area billed per piece, at the Quantity precision
+		total_area = flt(billed_area * pieces, 6)
+		self.assertEqual(row.uom, "Square Meter")
+		self.assertEqual(row.stock_uom, "Nos")
+		self.assertAlmostEqual(flt(row.qty), total_area, places=6)
+		self.assertAlmostEqual(flt(row.stock_qty), pieces, places=6)
+		self.assertAlmostEqual(flt(row.conversion_factor), 1 / billed_area, places=6)
+		self.assertAlmostEqual(flt(row.rate), flt(spec.selling_rate_per_m2), places=6)
+		self.assertAlmostEqual(flt(row.amount), flt(total_area * flt(spec.selling_rate_per_m2), 2), places=2)
 		self.assertEqual(row.gf_glass_specification, spec.name)
 		self.assertEqual(cint(row.gf_from_glass_specification), 1)
 		self.assertEqual(flt(row.gf_area_m2), flt(spec.area_m2))
@@ -271,6 +279,7 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 		result = add_spec_to_transaction(spec.name, "Quotation")
 		quotation = frappe.get_doc("Quotation", result["name"])
 		row = quotation.items[0]
+		area_qty = flt(row.qty)
 		row.rate = 26
 		row.amount = flt(row.rate * row.qty, 2)
 		quotation.save()
@@ -286,8 +295,8 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 		quotation.reload()
 		row = quotation.items[0]
 		self.assertEqual(flt(row.rate), 26)
-		self.assertEqual(flt(row.qty), 1)
-		self.assertEqual(flt(row.amount), 26.0)
+		self.assertAlmostEqual(flt(row.qty), area_qty, places=6)
+		self.assertAlmostEqual(flt(row.amount), flt(26 * area_qty, 2), places=2)
 		self.assertEqual(cint(row.gf_transaction_rate_overridden), 1)
 
 		quotation.delete()
@@ -302,7 +311,7 @@ class TestGlassProductSpecificationTransactions(IntegrationTestCase):
 		mark_transaction_rate_overrides(quotation)
 		self.assertEqual(cint(quotation.items[0].gf_transaction_rate_overridden), 1)
 
-		quotation.items[0].rate = quotation.items[0].gf_rate_per_piece
+		quotation.items[0].rate = quotation.items[0].gf_selling_rate_per_m2
 		mark_transaction_rate_overrides(quotation)
 		self.assertEqual(cint(quotation.items[0].gf_transaction_rate_overridden), 0)
 

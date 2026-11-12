@@ -47,8 +47,8 @@ def _operation_unit_quantity(
 	return 0
 
 
-def compute_processing_job_internal_cost(processing_job, company: str) -> float:
-	"""Return total internal processing cost for a Processing Job using cost rates."""
+def compute_processing_job_line_costs(processing_job, company: str) -> dict[str, float]:
+	"""Internal processing cost of a Processing Job, by Sales Order row."""
 	currency = frappe.get_cached_value("Company", company, "default_currency") or "USD"
 	input_dims: dict[str, dict[str, float]] = {}
 	for row in processing_job.get("inputs") or []:
@@ -60,7 +60,7 @@ def compute_processing_job_internal_cost(processing_job, company: str) -> float:
 			"width_mm": flt(row.get("width_mm")),
 		}
 
-	total = 0.0
+	costs: dict[str, float] = {}
 	for operation in processing_job.get("operations") or []:
 		operation_name = OPERATION_CODE_TO_NAME.get(operation.get("operation"), operation.get("operation"))
 		pricing_basis = OPERATION_PRICING_BASIS.get(operation_name)
@@ -68,7 +68,8 @@ def compute_processing_job_internal_cost(processing_job, company: str) -> float:
 			continue
 
 		cost_rate = get_operation_cost_rate(operation_name, currency, pricing_basis)
-		dims = input_dims.get(operation.get("sales_order_item"), {})
+		line = operation.get("sales_order_item") or ""
+		dims = input_dims.get(line, {})
 		unit_qty = _operation_unit_quantity(
 			operation_name,
 			pricing_basis,
@@ -77,28 +78,69 @@ def compute_processing_job_internal_cost(processing_job, company: str) -> float:
 			operation_count=flt(operation.get("operation_count") or 1),
 		)
 		piece_qty = flt(operation.get("qty") or 0)
-		total += flt(cost_rate * unit_qty * piece_qty, 2)
+		costs[line] = flt(costs.get(line, 0) + flt(cost_rate * unit_qty * piece_qty, 2), 2)
 
-	return flt(total, 2)
+	return costs
 
 
-def validate_processing_cost_expense_account(settings, processing_cost: float) -> str:
-	"""Validate capitalization settings and return the expense account."""
+def compute_processing_job_internal_cost(processing_job, company: str) -> float:
+	"""Return total internal processing cost for a Processing Job using cost rates."""
+	return flt(sum(compute_processing_job_line_costs(processing_job, company).values()), 2)
+
+
+def cost_rate_is_specified(row) -> bool:
+	"""True when the cost rate was entered on purpose, including an intentional zero.
+
+	A positive rate is specified even if the tick was never saved, because it cannot be the
+	seeded default. A zero is specified only when Cost Rate Set is ticked.
+	"""
+	if cint(row.get("cost_rate_set")):
+		return True
+	return flt(row.get("cost_rate")) > 0
+
+
+def missing_operation_cost_rates(processing_job, company: str) -> list[str]:
+	"""Operations on this job whose cost rate is still the seeded default."""
+	currency = frappe.get_cached_value("Company", company, "default_currency") or "USD"
+	settings = frappe.get_single("Glass Factory Settings")
+	index = {}
+	for row in settings.get("operation_rates") or []:
+		if row.get("operation") and cint(row.get("enabled")):
+			index[(row.operation, row.currency, row.pricing_basis)] = row
+
+	missing: list[str] = []
+	seen: set[str] = set()
+	for operation in processing_job.get("operations") or []:
+		name = OPERATION_CODE_TO_NAME.get(operation.get("operation"), operation.get("operation"))
+		basis = OPERATION_PRICING_BASIS.get(name)
+		if not name or not basis or name in seen:
+			continue
+		seen.add(name)
+		row = index.get((name, currency, basis))
+		if row is None or not cost_rate_is_specified(row):
+			missing.append(f"{name} ({basis}, {currency})")
+	return missing
+
+
+def validate_processing_cost_expense_account(settings, processing_cost: float, company: str | None = None) -> str:
+	"""Validate the capitalization account and return it.
+
+	Called when a final stock movement is about to be posted. A zero processing cost
+	has nothing to post, so the account is not required in that case.
+	"""
 	if not cint(settings.get("capitalize_processing_costs")):
 		return ""
 
 	if flt(processing_cost) <= 0:
 		return ""
 
-	expense_account = settings.get("processing_cost_expense_account")
-	if not expense_account:
-		frappe.throw(
-			"Processing Cost Expense Account is required in Glass Factory Settings when "
-			"processing cost capitalization is enabled and the job has processing cost."
-		)
-	if not frappe.db.exists("Account", expense_account):
-		frappe.throw(
-			f"Processing Cost Expense Account <b>{expense_account}</b> does not exist. "
-			"Update Glass Factory Settings before posting the final stock movement."
-		)
-	return expense_account
+	from glass_factory.glass_factory.settings_validation import (
+		get_operating_company,
+		valuation_account_errors,
+	)
+
+	posting_company = company or settings.get("company") or get_operating_company()
+	errors = valuation_account_errors(settings.get("processing_cost_expense_account"), posting_company)
+	if errors:
+		frappe.throw("<br>".join(errors), title="Processing Cost Expense Account")
+	return settings.get("processing_cost_expense_account")

@@ -4,6 +4,8 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "company_section",
+  "company",
   "warehouses_section",
   "raw_warehouse",
   "cut_wip_warehouse",
@@ -40,6 +42,18 @@
   "enable_cop"
  ],
  "fields": [
+  {
+   "fieldname": "company_section",
+   "fieldtype": "Section Break",
+   "label": "Operating Company"
+  },
+  {
+   "description": "Glass Factory stock, warehouses, currency defaults, and operation rates belong to this one company.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Operating Company",
+   "options": "Company"
+  },
   {
    "description": "Warehouses used by Cutting Job, Repack #1, Processing Job, Repack #2, and all glass stock movements.",
    "fieldname": "warehouses_section",
@@ -226,7 +240,7 @@
   },
   {
    "depends_on": "eval:doc.capitalize_processing_costs",
-   "description": "Expense account credited when processing cost is capitalized into finished goods stock.",
+   "description": "Active posting account of type Expenses Included In Valuation, for the operating company. Tax accounts such as Deferred Income Tax Expense are rejected.",
    "fieldname": "processing_cost_expense_account",
    "fieldtype": "Link",
    "label": "Processing Cost Expense Account",
@@ -255,7 +269,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-06-29 02:00:00.000000",
+ "modified": "2026-11-12 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Factory Settings",

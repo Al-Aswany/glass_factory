@@ -29,7 +29,7 @@ glass_factory.sync.spec_ready_filters = function () {
 	return {
 		items_generated: 1,
 		generation_status: "Generated",
-		status: ["in", ["Ready", "Items Generated", "Used"]],
+		status: ["in", ["Ready", "Items Generated", "Used", "Submitted"]],
 	};
 };
 

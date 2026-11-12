@@ -53,7 +53,7 @@ TECHNICAL_SPEC_FIELDS = (
     "special_slot_count",
 )
 
-TRANSACTION_READY_STATUSES = frozenset({"Ready", "Items Generated", "Used"})
+TRANSACTION_READY_STATUSES = frozenset({"Ready", "Items Generated", "Used", "Submitted"})
 PRICING_REFRESHED_STATUSES = frozenset({"Priced", "Ready", "Items Generated", "Used"})
 
 REFRESH_PRICING_REQUIRED_FIELDS = (
@@ -441,6 +441,9 @@ class GlassProductSpecification(Document):
 
     @frappe.whitelist()
     def generate_items(self):
+        from glass_factory.glass_factory.authorization import require_doc_permission
+
+        require_doc_permission(self, "write")
         if self.docstatus == 1:
             frappe.throw("Submitted specifications cannot generate items.")
 

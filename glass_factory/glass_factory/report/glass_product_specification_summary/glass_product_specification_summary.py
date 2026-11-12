@@ -18,6 +18,9 @@ from glass_factory.glass_factory.report.report_utils import (
 
 
 def execute(filters=None):
+	from glass_factory.glass_factory.authorization import require_cost_access
+
+	require_cost_access()
 	filters = filters or {}
 	columns = _columns()
 	data = _data(filters)

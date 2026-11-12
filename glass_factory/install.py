@@ -3,7 +3,11 @@ from frappe import _
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from glass_factory.glass_factory.glass_stock_entry_types import ensure_glass_stock_entry_types
-from glass_factory.glass_factory.settings_validation import DEMO_ALLOWED_GLASS_TYPES, get_area_uom
+from glass_factory.glass_factory.settings_validation import (
+	DEMO_ALLOWED_GLASS_TYPES,
+	require_area_uom,
+	resolve_setup_company,
+)
 from glass_factory.glass_factory.operation_rates import default_operation_rate_rows
 
 
@@ -17,19 +21,68 @@ GLASS_ROLES = [
 ]
 
 
+def before_install():
+	"""Runs before Frappe registers the app, creates its DocTypes, or marks patches complete.
+
+	A failing prerequisite here leaves the site untouched, so a retry after fixing the cause is a
+	normal ``bench install-app`` and never needs ``--force``.
+	"""
+	validate_install_prerequisites()
+
+
 def after_install():
 	"""Set up the Phase 0 manual glass MVP foundation."""
 	create_phase0_foundation()
 
 
-def create_phase0_foundation():
+def validate_install_prerequisites(company: str | None = None) -> str:
+	"""Fail before any Glass Factory setup writes when the site is not ready.
+
+	Returns the operating company that setup will use.
+	"""
+	if "erpnext" not in set(frappe.get_installed_apps()):
+		frappe.throw(
+			_(
+				"Glass Factory requires ERPNext. Install ERPNext and complete its setup "
+				"before installing Glass Factory."
+			)
+		)
+	if not frappe.db.exists("DocType", "Company"):
+		frappe.throw(_("Glass Factory requires the Company DocType from ERPNext."))
+	operating_company = resolve_setup_company(company)
+	require_area_uom()
+	if not frappe.db.exists("UOM", "Nos"):
+		frappe.throw(_("Glass Factory requires the Nos Unit of Measure from ERPNext."))
+	if not frappe.db.exists("Item Group", "All Item Groups"):
+		frappe.throw(_("Glass Factory requires the All Item Groups item group from ERPNext."))
+	return operating_company
+
+
+@frappe.whitelist()
+def ensure_glass_factory_setup(company: str | None = None):
+	"""Re-run essential setup. Safe to call again after a partial install.
+
+	Pass ``company`` to choose the operating company when several exist.
+	"""
+	frappe.only_for("System Manager")
+	operating_company = create_phase0_foundation(company=company)
+	return {"message": "Glass Factory setup is ready.", "company": operating_company}
+
+
+def create_phase0_foundation(company: str | None = None) -> str:
+	operating_company = validate_install_prerequisites(company)
 	create_roles()
 	create_glass_custom_fields()
 	seed_standard_permissions()
 	create_item_groups()
-	abbr = create_warehouses()
-	seed_glass_factory_settings(abbr)
+	abbr = create_warehouses(operating_company)
+	seed_glass_factory_settings(abbr, operating_company)
 	ensure_glass_stock_entry_types()
+	from glass_factory.glass_factory.selling_uom import backfill_area_uom_conversions
+
+	backfill_area_uom_conversions()
+	frappe.db.commit()
+	return operating_company
 
 
 def create_roles():
@@ -209,6 +262,7 @@ def create_glass_custom_fields():
 			{"fieldname": "gf_from_glass_specification", "label": "From Glass Specification", "fieldtype": "Check", "read_only": 1, "insert_after": "gf_glass_specification"},
 			{"fieldname": "gf_technical_summary", "label": "Technical Summary", "fieldtype": "Small Text", "read_only": 1, "insert_after": "gf_from_glass_specification"},
 			{"fieldname": "gf_source_item_role", "label": "Source Item Role", "fieldtype": "Select", "options": "\nRaw Sheet\nCut WIP\nFinal\nRemnant\nScrap", "insert_after": "gf_technical_summary"},
+			{"fieldname": "gf_processing_cost", "label": "Glass Processing Cost", "fieldtype": "Currency", "options": "Company:company:default_currency", "read_only": 1, "no_copy": 1, "insert_after": "gf_source_item_role", "description": "Internal processing cost of this row's Sales Order line, added to its valuation."},
 		],
 		"Batch": [
 			{"fieldname": "gf_glass_section", "fieldtype": "Section Break", "label": "Glass", "insert_after": "item", "collapsible": 1},
@@ -225,13 +279,14 @@ def create_glass_custom_fields():
 
 def _glass_piece_parent_fields():
 	return [
-		{"fieldname": "gf_glass_section", "fieldtype": "Section Break", "label": "Glass Pieces", "insert_after": "items"},
+		{"fieldname": "gf_glass_section", "fieldtype": "Section Break", "label": "Glass Pieces", "insert_after": "items", "hidden": 1},
 		{
 			"fieldname": "glass_pieces",
 			"fieldtype": "Table",
 			"label": "Glass Pieces",
 			"options": "Quotation Glass Piece",
 			"insert_after": "gf_glass_section",
+			"hidden": 1,
 		},
 	]
 
@@ -248,32 +303,21 @@ def create_item_groups():
 	frappe.db.commit()
 
 
-def _get_install_company():
-	default_company = frappe.defaults.get_defaults().company
-	if default_company and frappe.db.exists("Company", default_company):
-		return default_company
-
-	company = frappe.db.get_value("Company", {"is_group": 0}, "name")
-	if company:
-		return company
-
-	return frappe.db.get_value("Company", {}, "name")
+GLASS_WAREHOUSE_NAMES = ("Glass Raw Stock", "Glass Cut WIP", "Glass Final Goods", "Glass Remnants", "Glass Scrap")
 
 
-def create_warehouses():
-	company = _get_install_company()
-	if not company:
-		frappe.throw(
-			_(
-				"Glass Factory requires at least one Company. "
-				"Complete the ERPNext Setup Wizard or create a Company before installing this app."
-			)
-		)
+def create_warehouses(company: str | None = None):
+	"""Create the five glass warehouses for the operating company and return its abbreviation.
 
+	A warehouse that already exists must belong to that company. It is never silently reused
+	for another one.
+	"""
+	company = resolve_setup_company(company)
 	abbr = frappe.get_value("Company", company, "abbr") or company[:4].upper()
-	for wh_name in ("Glass Raw Stock", "Glass Cut WIP", "Glass Final Goods", "Glass Remnants", "Glass Scrap"):
+	for wh_name in GLASS_WAREHOUSE_NAMES:
 		full_name = f"{wh_name} - {abbr}"
 		if frappe.db.exists("Warehouse", full_name):
+			_assert_warehouse_company(full_name, company)
 			continue
 		wh = frappe.new_doc("Warehouse")
 		wh.warehouse_name = wh_name
@@ -283,15 +327,47 @@ def create_warehouses():
 	return abbr
 
 
-def seed_glass_factory_settings(abbr):
+def _assert_warehouse_company(warehouse: str, company: str) -> None:
+	owner = frappe.db.get_value("Warehouse", warehouse, "company")
+	if owner != company:
+		frappe.throw(
+			_("Warehouse {0} belongs to company {1}, not the operating company {2}.").format(
+				warehouse, owner, company
+			)
+		)
+
+
+def seed_glass_factory_settings(abbr, company: str | None = None):
+	company = resolve_setup_company(company)
 	settings = frappe.get_single("Glass Factory Settings")
-	settings.raw_warehouse = settings.raw_warehouse or f"Glass Raw Stock - {abbr}"
-	settings.cut_wip_warehouse = settings.cut_wip_warehouse or f"Glass Cut WIP - {abbr}"
-	settings.final_goods_warehouse = settings.final_goods_warehouse or f"Glass Final Goods - {abbr}"
-	settings.remnants_warehouse = settings.remnants_warehouse or f"Glass Remnants - {abbr}"
-	settings.scrap_warehouse = settings.scrap_warehouse or f"Glass Scrap - {abbr}"
+	first_seed = not settings.raw_warehouse
+	if settings.meta.has_field("company"):
+		if settings.company and settings.company != company:
+			frappe.throw(
+				_(
+					"Glass Factory is already set up for company {0}. This deployment is single-company, "
+					"so it cannot also be set up for {1}."
+				).format(settings.company, company)
+			)
+		settings.company = company
+	defaults = {
+		"raw_warehouse": f"Glass Raw Stock - {abbr}",
+		"cut_wip_warehouse": f"Glass Cut WIP - {abbr}",
+		"final_goods_warehouse": f"Glass Final Goods - {abbr}",
+		"remnants_warehouse": f"Glass Remnants - {abbr}",
+		"scrap_warehouse": f"Glass Scrap - {abbr}",
+	}
+	for fieldname, default in defaults.items():
+		existing = settings.get(fieldname)
+		if existing:
+			# Reuse a saved warehouse only when it belongs to the operating company.
+			if frappe.db.exists("Warehouse", existing):
+				_assert_warehouse_company(existing, company)
+		else:
+			settings.set(fieldname, default)
 	settings.default_uom = settings.default_uom or "Nos"
-	settings.default_item_group = settings.default_item_group or "All Item Groups"
+	if settings.meta.has_field("default_item_group"):
+		settings.default_item_group = settings.default_item_group or "All Item Groups"
 	settings.raw_item_group = settings.raw_item_group or "Glass Raw"
 	settings.cut_wip_item_group = settings.cut_wip_item_group or "Glass Cut WIP"
 	settings.final_item_group = settings.final_item_group or "Glass Final"
@@ -303,27 +379,26 @@ def seed_glass_factory_settings(abbr):
 	settings.min_remnant_area_m2 = settings.min_remnant_area_m2 or 0.1
 	settings.min_remnant_side_mm = settings.min_remnant_side_mm or 100
 	settings.min_chargeable_area_m2 = settings.min_chargeable_area_m2 or 0.05
-	settings.enable_cop = 0
-	ensure_default_operation_rates(settings)
+	if first_seed:
+		settings.enable_cop = 0
+	ensure_default_operation_rates(settings, company)
 	settings.save(ignore_permissions=True)
 	frappe.db.commit()
 
 
-def ensure_default_operation_rates(settings):
-	"""Seed flexible operation rates when the table is empty."""
+def ensure_default_operation_rates(settings, company: str | None = None):
+	"""Seed flexible operation rates, in the operating company's currency, when the table is empty."""
 	if settings.get("operation_rates"):
 		return
 
-	currency = _get_default_company_currency()
+	currency = _get_default_company_currency(company)
 	for row in default_operation_rate_rows(currency):
 		settings.append("operation_rates", row)
 
 
-def _get_default_company_currency() -> str:
-	company = frappe.defaults.get_global_default("company")
-	if company:
-		return frappe.get_cached_value("Company", company, "default_currency") or "USD"
-	return frappe.db.get_value("Company", {"is_group": 0}, "default_currency") or "USD"
+def _get_default_company_currency(company: str | None = None) -> str:
+	company = resolve_setup_company(company)
+	return frappe.get_cached_value("Company", company, "default_currency") or "USD"
 
 
 def _ensure_scrap_item():
@@ -334,7 +409,7 @@ def _ensure_scrap_item():
 	item.item_code = item_code
 	item.item_name = item_code
 	item.item_group = "Glass Scrap" if frappe.db.exists("Item Group", "Glass Scrap") else "All Item Groups"
-	item.stock_uom = get_area_uom()
+	item.stock_uom = require_area_uom()
 	item.is_stock_item = 1
 	item.is_sales_item = 0
 	item.is_purchase_item = 0

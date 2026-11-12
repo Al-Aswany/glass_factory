@@ -349,7 +349,7 @@ def _save_result_file(cutting_job_name: str, result: dict, json_text: str) -> st
 		"attached_to_doctype": "Cutting Job",
 		"attached_to_name": cutting_job_name,
 		"content": content,
-		"is_private": 0,
+		"is_private": 1,
 	})
 	file_doc.save(ignore_permissions=True)
 	return file_doc.file_url
@@ -382,7 +382,7 @@ def _create_export_file(cutting_job_name: str, content: str) -> str:
 		"attached_to_doctype": "Cutting Job",
 		"attached_to_name": cutting_job_name,
 		"content": content,
-		"is_private": 0,
+		"is_private": 1,
 	})
 	file_doc.save(ignore_permissions=True)
 	return file_doc.file_url
@@ -395,20 +395,25 @@ def _save_optimization_job(job) -> None:
 	job.save(ignore_permissions=True)
 
 
-def _mark_import_failed(cutting_job_name: str, message: str) -> None:
-	"""Record a failed import directly in the DB so it always persists."""
-	frappe.db.set_value(
-		"Cutting Job",
-		cutting_job_name,
-		{"optimization_status": "Failed", "optimization_message": message},
-		update_modified=True,
-	)
+def _require_cop_for_optimizer() -> None:
+	"""Optimizer mutations follow the same disabled switch as the rest of COP."""
+	if frappe.db.exists("DocType", "Glass Factory Settings") and frappe.db.get_single_value(
+		"Glass Factory Settings", "enable_cop"
+	):
+		return
+	frappe.throw("COP is disabled. Optimizer export and import are not available.")
 
 
 @frappe.whitelist()
 def export_optimization_job(cutting_job_name: str) -> dict:
 	"""Export Cutting Job as GlassOptimizer job.json and attach to the document."""
+	from glass_factory.glass_factory.authorization import require_doc_permission
+
 	job = frappe.get_doc("Cutting Job", cutting_job_name)
+	if job.docstatus == 2:
+		frappe.throw(f"Cutting Job {job.name} is cancelled.")
+	require_doc_permission(job, "write")
+	_require_cop_for_optimizer()
 	payload = build_export_payload(job)
 	content = json.dumps(payload, indent=2)
 	file_url = _create_export_file(job.name, content)
@@ -432,23 +437,21 @@ def import_optimization_result(
 	json_text: str | None = None,
 ) -> dict:
 	"""Import GlassOptimizer result.json into Cutting Job optimization tables."""
-	try:
-		result = _load_result_json(file_url=file_url, json_text=json_text)
-		validate_import_payload(result, cutting_job_name)
+	from glass_factory.glass_factory.authorization import require_doc_permission
 
-		# When content is sent directly, save it as an attachment so it's visible
-		if json_text and not file_url:
-			file_url = _save_result_file(cutting_job_name, result, json_text)
+	job = frappe.get_doc("Cutting Job", cutting_job_name)
+	if job.docstatus == 2:
+		frappe.throw(f"Cutting Job {job.name} is cancelled.")
+	require_doc_permission(job, "write")
+	_require_cop_for_optimizer()
+	result = _load_result_json(file_url=file_url, json_text=json_text)
+	validate_import_payload(result, cutting_job_name)
 
-		_persist_import_to_db(cutting_job_name, result, file_url=file_url)
-		frappe.db.commit()
-	except frappe.ValidationError as exc:
-		_mark_import_failed(cutting_job_name, str(exc))
-		frappe.db.commit()
-		raise
-	except Exception:
-		frappe.log_error(frappe.get_traceback(), "GlassOptimizer Import Error")
-		raise
+	# When content is sent directly, save it as an attachment so it's visible
+	if json_text and not file_url:
+		file_url = _save_result_file(cutting_job_name, result, json_text)
+
+	_persist_import_to_db(cutting_job_name, result, file_url=file_url)
 
 	return {"message": "Optimization result imported."}
 
@@ -456,7 +459,10 @@ def import_optimization_result(
 @frappe.whitelist()
 def get_imported_optimization_result(cutting_job_name: str) -> dict:
 	"""Return normalized imported optimization result from Cutting Job child tables."""
+	from glass_factory.glass_factory.authorization import require_doc_permission
+
 	job = frappe.get_doc("Cutting Job", cutting_job_name)
+	require_doc_permission(job, "read")
 	return {
 		"cutting_job": job.name,
 		"status": job.get("optimization_status") or "Not Exported",

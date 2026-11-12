@@ -67,8 +67,11 @@ class TestStockPosting(IntegrationTestCase):
 		remnant_area = _item_area_m2(remnant_row.item_code)
 		total_area = cut_area + remnant_area
 
-		self.assertAlmostEqual(cut_row.basic_rate, flt(1000 * cut_area / total_area))
-		self.assertAlmostEqual(remnant_row.basic_rate, flt(1000 * remnant_area / total_area))
+		# Row values are whole cents, with the larger row taking what rounding leaves over,
+		# so the two rows add up to exactly the consumed 1000.
+		self.assertAlmostEqual(cut_row.basic_rate, flt(1000 * cut_area / total_area), places=2)
+		self.assertAlmostEqual(remnant_row.basic_rate, flt(1000 * remnant_area / total_area), places=2)
+		self.assertAlmostEqual(cut_row.basic_amount + remnant_row.basic_amount, 1000, places=6)
 		self.assertAlmostEqual(cut_row.basic_amount, flt(cut_row.basic_rate) * flt(cut_row.transfer_qty), places=2)
 		self.assertAlmostEqual(remnant_row.basic_amount, flt(remnant_row.basic_rate) * flt(remnant_row.transfer_qty), places=2)
 		self.assertTrue(cut_row.set_basic_rate_manually)

@@ -8,7 +8,7 @@ from frappe.utils import cint, flt, getdate, today
 from glass_factory.glass_factory.settings_validation import get_default_selling_warehouse
 from glass_factory.glass_factory.spec_production import enrich_spec_transaction_row
 
-TRANSACTION_READY_STATUSES = frozenset({"Ready", "Items Generated", "Used"})
+TRANSACTION_READY_STATUSES = frozenset({"Ready", "Items Generated", "Used", "Submitted"})
 
 SUPPORTED_TARGET_DOCTYPES = ("Quotation", "Sales Order")
 
@@ -50,6 +50,9 @@ def validate_spec_ready_for_transaction(spec, *, allow_zero_price: bool = False)
 	if spec.get("generation_status") != "Generated":
 		frappe.throw("Generate items before adding this specification to a transaction.")
 
+	if cint(spec.get("docstatus")) == 2 or spec.get("status") == "Cancelled":
+		frappe.throw("Cancelled specifications cannot be added to a transaction.")
+
 	status = spec.get("status") or "Draft"
 	if status not in TRANSACTION_READY_STATUSES:
 		frappe.throw("This specification must be ready before it can be used in a transaction.")
@@ -87,27 +90,43 @@ def build_design_attachment_summary(spec) -> str:
 
 
 def map_spec_to_transaction_row(spec) -> dict:
+	"""Selling row for a specification: m² quantity and rate, piece stock quantity.
+
+	The customer sees total area (Qty, Square Meter), the selling rate per m², and the line
+	amount. Stock, cutting, and delivery keep counting pieces through ``stock_qty``.
+	"""
+	from glass_factory.glass_factory.selling_uom import (
+		billing_area_m2,
+		ensure_item_area_conversion,
+		require_selling_area_uom,
+	)
+
 	final_item = spec.get("final_item_code") or spec.get("generated_item")
 	item = frappe.get_doc("Item", final_item)
-	qty = flt(spec.get("qty")) or 1
-	rate = flt(spec.rate_per_piece)
-	amount = flt(qty * rate, 2)
-	total_area_m2 = flt(flt(spec.area_m2) * qty, 6)
+	pieces = flt(spec.get("qty")) or 1
+	area_per_piece = flt(spec.area_m2)
+	area_uom = require_selling_area_uom()
+	conversion_factor = ensure_item_area_conversion(final_item)
+	# Physical area for production; billed area (rounded to the Quantity precision) for the
+	# selling Quantity so that whole pieces convert exactly. Equal for clean areas like 0.96 m².
+	total_area_m2 = flt(area_per_piece * pieces, 6)
+	billed_area_m2 = flt(billing_area_m2(area_per_piece) * pieces, 9)
+	rate = flt(spec.selling_rate_per_m2)
+	amount = flt(billed_area_m2 * rate, 2)
 
 	return {
 		"item_code": final_item,
 		"item_name": item.item_name or final_item,
 		"description": spec.get("technical_summary") or item.item_name or final_item,
-		"qty": qty,
-		"uom": item.stock_uom or "Nos",
+		"qty": billed_area_m2,
+		"uom": area_uom,
 		"stock_uom": item.stock_uom or "Nos",
-		"conversion_factor": 1,
+		"conversion_factor": conversion_factor,
+		"stock_qty": pieces,
 		"rate": rate,
 		"amount": amount,
 		"net_rate": rate,
 		"net_amount": amount,
-		"base_rate": rate,
-		"base_amount": amount,
 		"gf_glass_specification": spec.name,
 		"gf_from_glass_specification": 1,
 		"gf_area_m2": flt(spec.area_m2),
@@ -117,7 +136,7 @@ def map_spec_to_transaction_row(spec) -> dict:
 		"gf_manual_selling_rate_per_m2": flt(spec.manual_selling_rate_per_m2),
 		"gf_price_override": cint(spec.price_override),
 		"gf_price_difference_per_m2": flt(spec.price_difference_per_m2),
-		"gf_rate_per_piece": rate,
+		"gf_rate_per_piece": flt(spec.get("rate_per_piece")),
 		"gf_raw_sheet_item": spec.get("raw_item_code") or spec.get("raw_sheet_item"),
 		"gf_cut_wip_item": spec.get("cut_wip_item_code"),
 		"gf_final_item": final_item,
@@ -135,16 +154,34 @@ def _find_existing_spec_row(doc, spec_name: str):
 	return None
 
 
+def _row_is_sold_by_area(row) -> bool:
+	from glass_factory.glass_factory.selling_uom import find_area_uom
+	from glass_factory.glass_factory.settings_validation import AREA_UOM_ALIASES
+
+	if (row.get("uom") or "").strip().lower() not in AREA_UOM_ALIASES:
+		return False
+	area_uom = find_area_uom()
+	return bool(area_uom) and (row.get("uom") or "") == area_uom and (row.get("stock_uom") or "") != area_uom
+
+
+def _spec_rate_in_row_uom(row):
+	"""The specification's rate in the row's own selling UOM (per m², or per piece for old Nos rows)."""
+	if _row_is_sold_by_area(row):
+		return row.get("gf_selling_rate_per_m2")
+	return row.get("gf_rate_per_piece")
+
+
 def _row_rate_manually_edited(row) -> bool:
-	spec_rate = row.get("gf_rate_per_piece")
+	spec_rate = _spec_rate_in_row_uom(row)
 	if spec_rate in (None, ""):
 		return False
-	return flt(row.get("rate")) != flt(spec_rate)
+	return abs(flt(row.get("rate")) - flt(spec_rate)) > 1e-6
 
 
 def _apply_spec_row_update(existing_row, row_data: dict) -> None:
 	manually_edited = _row_rate_manually_edited(existing_row)
 	preserved_rate = flt(existing_row.rate) if manually_edited else None
+	was_sold_by_area = _row_is_sold_by_area(existing_row)
 
 	for fieldname, value in row_data.items():
 		if fieldname in ("rate", "amount", "net_rate", "net_amount", "base_rate", "base_amount"):
@@ -154,6 +191,9 @@ def _apply_spec_row_update(existing_row, row_data: dict) -> None:
 	qty = flt(row_data.get("qty"))
 	if manually_edited:
 		rate = preserved_rate
+		if not was_sold_by_area and flt(row_data.get("gf_area_m2")) > 0:
+			# An old Nos row held a per-piece override: express it per m² for the new selling UOM.
+			rate = flt(preserved_rate / flt(row_data.get("gf_area_m2")), 9)
 	else:
 		rate = flt(row_data.get("rate"))
 
@@ -163,9 +203,7 @@ def _apply_spec_row_update(existing_row, row_data: dict) -> None:
 	existing_row.amount = amount
 	existing_row.net_rate = rate
 	existing_row.net_amount = amount
-	existing_row.base_rate = rate
-	existing_row.base_amount = amount
-	existing_row.gf_total_area_m2 = flt(flt(row_data.get("gf_area_m2")) * qty, 6)
+	existing_row.gf_total_area_m2 = flt(row_data.get("gf_total_area_m2"), 6)
 
 
 def mark_transaction_rate_overrides(doc, method=None) -> None:
@@ -276,13 +314,25 @@ def add_spec_to_transaction(
 		frappe.throw(f"Unsupported target doctype: {target_doctype}")
 
 	spec = frappe.get_doc("Glass Product Specification", spec_name)
+	if not frappe.has_permission("Glass Product Specification", "read", doc=spec):
+		frappe.throw("You do not have permission to read this specification.", frappe.PermissionError)
 	validate_spec_ready_for_transaction(spec, allow_zero_price=cint(allow_zero_price))
 
 	if target_name:
 		doc = frappe.get_doc(target_doctype, target_name)
 		if doc.docstatus != 0:
 			frappe.throw(f"Cannot add a specification to submitted {target_doctype}.")
+		if not frappe.has_permission(target_doctype, "write", doc=doc):
+			frappe.throw(f"You do not have permission to change this {target_doctype}.", frappe.PermissionError)
 	else:
+		from glass_factory.glass_factory.authorization import require_doctype_permission
+
+		require_doctype_permission(
+			target_doctype,
+			"create",
+			company=spec.get("company"),
+			message=f"You do not have permission to create a {target_doctype}.",
+		)
 		doc = _new_transaction_from_spec(target_doctype, spec)
 
 	existing_row = _find_existing_spec_row(doc, spec.name)

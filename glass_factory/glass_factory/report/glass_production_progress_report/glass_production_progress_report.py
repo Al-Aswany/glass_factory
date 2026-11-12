@@ -88,7 +88,8 @@ def build_progress_row(spec: Dict, so_row: Dict | None, filters: Dict | None = N
 	cj_status = frappe.db.get_value("Cutting Job", cutting_job, "status") if cutting_job else ""
 	pj_status = frappe.db.get_value("Glass Processing Job", processing_job, "status") if processing_job else ""
 
-	qty_ordered = flt((so_row or {}).get("qty"))
+	# Ordered pieces (stock qty): cut, processed, and delivered are all piece counts.
+	qty_ordered = flt((so_row or {}).get("stock_qty") or (so_row or {}).get("qty"))
 	qty_cut = flt((so_row or {}).get("gf_cut_qty"))
 	qty_processed = flt((so_row or {}).get("gf_processed_qty"))
 	qty_delivered = flt((so_row or {}).get("gf_delivered_qty"))
@@ -138,6 +139,7 @@ def _fetch_best_so_row(spec_name: str, filters: Dict) -> Dict | None:
 			soi.name,
 			soi.parent.as_("sales_order"),
 			soi.qty,
+			soi.stock_qty,
 			soi.gf_cut_qty,
 			soi.gf_processed_qty,
 			soi.gf_delivered_qty,

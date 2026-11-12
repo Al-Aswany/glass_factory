@@ -459,3 +459,75 @@ class TestPricingLookupFallback(IntegrationTestCase):
 			with patch("glass_factory.glass_factory.spec_pricing.frappe.db.exists", return_value=True):
 				result = get_operation_rate("Sandblast", "USD", "Per Square Meter")
 		self.assertNotEqual(result, 999, "Disabled row rate should not be used")
+
+
+class TestCapitalizationAccountAndCostRate(IntegrationTestCase):
+	"""The capitalization account must be fit for valuation, and a seeded zero is not a real cost."""
+
+	def test_cost_rate_set_distinguishes_an_intentional_zero(self):
+		from glass_factory.glass_factory.processing_cost import cost_rate_is_specified
+
+		self.assertFalse(cost_rate_is_specified(frappe._dict(cost_rate=0, cost_rate_set=0)))
+		self.assertTrue(cost_rate_is_specified(frappe._dict(cost_rate=0, cost_rate_set=1)))
+		self.assertTrue(cost_rate_is_specified(frappe._dict(cost_rate=4, cost_rate_set=0)))
+
+	def test_saving_a_positive_cost_rate_ticks_cost_rate_set(self):
+		settings = frappe.get_single("Glass Factory Settings")
+		row = next((entry for entry in settings.operation_rates if entry.operation and entry.enabled), None)
+		if row is None:
+			self.skipTest("Glass Factory Settings has no operation rate row")
+		row.cost_rate = 3
+		row.cost_rate_set = 0
+		try:
+			validate_settings_document(settings)
+			self.assertEqual(row.cost_rate_set, 1)
+		finally:
+			settings.reload()
+
+	def test_deferred_income_tax_and_other_unsuitable_accounts_are_rejected(self):
+		from glass_factory.glass_factory.settings_validation import valuation_account_errors
+
+		settings = frappe.get_single("Glass Factory Settings")
+		company = settings.company or frappe.db.get_value("Company", {}, "name")
+		tax = frappe.db.get_value(
+			"Account",
+			{"company": company, "is_group": 0, "account_name": ["like", "%Deferred Income Tax%"]},
+			"name",
+		) or frappe.db.get_value(
+			"Account",
+			{"company": company, "is_group": 0, "account_type": "Tax"},
+			"name",
+		)
+		if not tax:
+			self.skipTest("Site has no tax account")
+		settings.capitalize_processing_costs = 1
+		settings.processing_cost_expense_account = tax
+		try:
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				validate_settings_document(settings)
+			message = str(ctx.exception)
+			self.assertIn("Expenses Included In Valuation", message)
+			self.assertIn("Deferred Income Tax", message)
+		finally:
+			settings.reload()
+
+		errors = valuation_account_errors(tax, company)
+		self.assertTrue(any("not suitable" in error for error in errors))
+
+		group = frappe.db.get_value("Account", {"company": company, "is_group": 1}, "name")
+		if group:
+			group_errors = valuation_account_errors(group, company)
+			self.assertTrue(any("posting account" in error for error in group_errors))
+
+		valuation = frappe.db.get_value(
+			"Account",
+			{"company": company, "is_group": 0, "account_type": "Expenses Included In Valuation"},
+			"name",
+		)
+		self.assertFalse(valuation_account_errors(valuation, company))
+		frappe.db.set_value("Account", valuation, "disabled", 1)
+		try:
+			disabled_errors = valuation_account_errors(valuation, company)
+			self.assertTrue(any("disabled" in error for error in disabled_errors))
+		finally:
+			frappe.db.set_value("Account", valuation, "disabled", 0)

@@ -221,6 +221,9 @@ def item_role(item_code: str) -> str:
 @frappe.whitelist()
 def get_item_glass_meta(item_code: str) -> dict:
 	"""Return role and dimensions parsed from a glass Item code."""
+	from glass_factory.glass_factory.authorization import require_logged_in_glass_user
+
+	require_logged_in_glass_user()
 	parsed = _parse_raw_item_code(item_code) or {}
 	return {
 		"parsed": bool(parsed),
@@ -508,6 +511,8 @@ def ensure_cut_wip_item_from_spec(spec, raw_doc) -> str:
 	return ensure_cut_wip_item(raw_doc, glass_spec)
 
 
+
+
 def ensure_final_item_from_spec(spec, raw_doc) -> str:
 	"""Reuse or create the Final Item using the specification item code preview."""
 	item_code = build_final_item_code_from_spec(spec)
@@ -520,8 +525,23 @@ def ensure_final_item_from_spec(spec, raw_doc) -> str:
 		role="Final",
 		spec=glass_spec,
 		item_group=_settings_value("final_item_group") or _settings_value("default_item_group") or raw_doc.item_group,
-		stock_uom=raw_doc.stock_uom or _settings_value("default_uom") or "Nos",
+		stock_uom=piece_stock_uom(raw_doc),
 	)
+
+
+def piece_stock_uom(raw_doc=None) -> str:
+	"""Stock UOM for cut and finished glass: pieces, never the area UOM it is sold in."""
+	from glass_factory.glass_factory.settings_validation import find_area_uom_name
+
+	area_uom = find_area_uom_name()
+	for candidate in (
+		getattr(raw_doc, "stock_uom", None) if raw_doc else None,
+		_settings_value("default_uom"),
+		"Nos",
+	):
+		if candidate and candidate != area_uom:
+			return candidate
+	return "Nos"
 
 
 def generate_items_from_spec(spec) -> dict[str, str]:
@@ -654,6 +674,9 @@ def preview_raw_item_code(
 	width_mm=None,
 ) -> dict:
 	"""Build a deterministic raw sheet Item code preview for the Item form helper."""
+	from glass_factory.glass_factory.authorization import require_logged_in_glass_user
+
+	require_logged_in_glass_user()
 	thickness = flt(thickness_mm)
 	length = flt(length_mm)
 	width = flt(width_mm)
@@ -710,6 +733,9 @@ def ensure_item_uom_conversion(item_code: str, uom: str, conversion_factor: floa
 @frappe.whitelist()
 def get_allowed_glass_types() -> list[str]:
 	"""Return setup-controlled glass type codes in display order."""
+	from glass_factory.glass_factory.authorization import require_logged_in_glass_user
+
+	require_logged_in_glass_user()
 	raw_value = _settings_value("allowed_glass_types")
 	values = []
 	for token in re.split(r"[\n,;]+", raw_value or ""):

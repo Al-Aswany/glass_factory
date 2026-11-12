@@ -69,11 +69,16 @@ def compute_spec_internal_processing_cost(spec: Dict[str, Any]) -> float:
 	) or "USD"
 	total = 0.0
 	for row in spec.get("operation_pricing") or []:
-		operation = row.get("operation") if isinstance(row, dict) else row.operation
-		basis = row.get("pricing_basis") if isinstance(row, dict) else row.pricing_basis
-		qty = flt(row.get("quantity") if isinstance(row, dict) else row.quantity)
-		cost_rate = get_operation_cost_rate(operation, currency, basis)
-		total += flt(cost_rate * qty, 2)
+		get = row.get if isinstance(row, dict) else row.get
+		stored = flt(get("cost_amount"))
+		if stored:
+			# Same internal figure the specification form and margin use.
+			total += stored
+			continue
+		operation = get("operation")
+		basis = get("pricing_basis")
+		qty = flt(get("quantity"))
+		total += flt(get_operation_cost_rate(operation, currency, basis) * qty, 2)
 	return flt(total, 2)
 
 
@@ -192,6 +197,7 @@ def fetch_so_for_spec(spec_name: str) -> Optional[Dict[str, Any]]:
 			soi.name,
 			soi.parent.as_("sales_order"),
 			soi.qty,
+			soi.stock_qty,
 			soi.rate,
 			soi.amount,
 			soi.gf_cut_qty,

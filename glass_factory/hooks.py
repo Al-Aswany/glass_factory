@@ -91,6 +91,7 @@ doctype_js = {
 # Installation
 # ------------
 
+before_install = "glass_factory.install.before_install"
 after_install = "glass_factory.install.after_install"
 
 # Uninstallation
@@ -150,15 +151,25 @@ doc_events = {
 		"on_submit": "glass_factory.glass_factory.design_attachments.on_glass_product_specification_save",
 	},
 	"Quotation": {
-		"before_validate": "glass_factory.glass_factory.selling_validations.resolve_glass_items",
-		"validate": "glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
+		"before_validate": [
+			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
+			"glass_factory.glass_factory.selling_uom.snap_area_quantities",
+		],
+		"validate": [
+			"glass_factory.glass_factory.selling_uom.snap_stock_quantities",
+			"glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
+		],
 		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
 		"on_update": "glass_factory.glass_factory.design_attachments.on_document_update_sync_design_attachments",
 	},
 	"Sales Order": {
-		"before_validate": "glass_factory.glass_factory.selling_validations.resolve_glass_items",
+		"before_validate": [
+			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
+			"glass_factory.glass_factory.selling_uom.snap_area_quantities",
+		],
 		"validate": [
 			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
+			"glass_factory.glass_factory.selling_uom.snap_stock_quantities",
 			"glass_factory.glass_factory.spec_transaction.mark_transaction_rate_overrides",
 		],
 		"before_submit": "glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
@@ -171,12 +182,28 @@ doc_events = {
 		"on_update": "glass_factory.glass_factory.design_attachments.on_document_update_sync_design_attachments",
 	},
 	"Delivery Note": {
-		"validate": "glass_factory.glass_factory.selling_validations.validate_delivery_note",
+		"before_validate": "glass_factory.glass_factory.selling_uom.snap_area_quantities",
+		"validate": [
+			"glass_factory.glass_factory.selling_uom.snap_stock_quantities",
+			"glass_factory.glass_factory.selling_validations.validate_delivery_note",
+		],
 		"on_submit": "glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
+		"on_cancel": "glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
+	},
+	"Sales Invoice": {
+		"before_validate": "glass_factory.glass_factory.selling_uom.snap_area_quantities",
+		"validate": [
+			"glass_factory.glass_factory.selling_uom.snap_stock_quantities",
+			"glass_factory.glass_factory.selling_validations.validate_delivery_note",
+		],
+		"on_submit": "glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
+		"on_cancel": "glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
 	},
 	"Stock Entry": {
 		"before_validate": "glass_factory.glass_factory.stock_entry_hooks.prepare_glass_stock_entry",
 		"validate": "glass_factory.glass_factory.selling_validations.validate_stock_entry",
+		"before_cancel": "glass_factory.glass_factory.stock_entry_hooks.before_cancel_glass_stock_entry",
+		"on_cancel": "glass_factory.glass_factory.stock_entry_hooks.on_cancel_glass_stock_entry",
 	},
 	"Batch": {
 		"before_save": "glass_factory.glass_factory.batch_hooks.compute_area",
@@ -216,9 +243,11 @@ doc_events = {
 # ------------------------------
 #
 # Specify custom mixins to extend the standard doctype controller.
-# extend_doctype_class = {
-# 	"Task": "glass_factory.custom.task.CustomTaskMixin"
-# }
+# Glass repack rates are derived from the consumed rows every time ERPNext recalculates the
+# Stock Entry (save, posting, and re-valuation after a Landed Cost Voucher).
+extend_doctype_class = {
+	"Stock Entry": ["glass_factory.glass_factory.stock_valuation.GlassStockEntryMixin"],
+}
 
 # Overriding Methods
 # ------------------------------

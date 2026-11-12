@@ -9,6 +9,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import flt
 
 from glass_factory.glass_factory.spec_transaction import map_spec_to_transaction_row
+from glass_factory.glass_factory.stock_valuation import split_value, value_processing_repack
 from glass_factory.glass_factory.stock_posting import (
 	build_cutting_repack,
 	build_processing_repack,
@@ -163,6 +164,21 @@ def _patched_processing_build(job, *, settings=None):
 					"gf_final_item": "GLS-CLEAR-8MM-1200X800-POL-TMP-FINAL",
 				}
 			)
+		if doctype == "Account" and args and args[0] == "Expenses - _TC":
+			row = frappe._dict(
+				disabled=0,
+				is_group=0,
+				company="_Test Company",
+				account_type="Expenses Included In Valuation",
+				report_type="Profit and Loss",
+				account_name="Expenses",
+			)
+			fields = args[1] if len(args) > 1 else kwargs.get("fieldname")
+			if isinstance(fields, (list, tuple)):
+				return frappe._dict({field: row.get(field) for field in fields})
+			if isinstance(fields, str) and not kwargs.get("as_dict"):
+				return row.get(fields)
+			return row
 		return real_get_value(doctype, *args, **kwargs)
 
 	def _fake_exists(doctype, name):
@@ -179,7 +195,8 @@ def _patched_processing_build(job, *, settings=None):
 		patch(base + "batch_row_fields", side_effect=lambda item, batch: {"batch_no": batch, "use_serial_batch_fields": 1} if batch else {}), \
 		patch("frappe.db.get_value", side_effect=_fake_get_value), \
 		patch("frappe.db.exists", side_effect=_fake_exists), \
-		patch(base + "compute_processing_job_internal_cost", return_value=210):
+		patch(base + "compute_processing_job_line_costs", return_value={"SOI-COST-001": 210}), \
+		patch(base + "missing_operation_cost_rates", return_value=[]):
 		return build_processing_repack(job)
 
 
@@ -198,6 +215,48 @@ def _set_repack_totals(se, *, outgoing_total: float, incoming_rate: float) -> No
 	se.distribute_additional_costs()
 	se.update_valuation_rate()
 	se.set_total_incoming_outgoing_value()
+
+
+def _two_line_repack_entry(*, cut_wip_values):
+	"""A Repack #2 draft with two equal-area lines whose Cut WIP is worth different amounts."""
+	se = frappe.new_doc("Stock Entry")
+	se.company = "_Test Company"
+	se.purpose = "Repack"
+	se.gf_created_by_glass_factory = 1
+	se.gf_glass_stock_flow = "Cut WIP to Final"
+	lines = (
+		("SOI-A", "GLS-CLEAR-8MM-1200X800-CUT", "GLS-CLEAR-8MM-1200X800-POL", cut_wip_values[0]),
+		("SOI-B", "GLS-CLEAR-8MM-1000X960-CUT", "GLS-CLEAR-8MM-1000X960-POL", cut_wip_values[1]),
+	)
+	for line, cut_item, _final_item, value in lines:
+		se.append(
+			"items",
+			{
+				"item_code": cut_item,
+				"s_warehouse": "Glass Cut WIP - _TC",
+				"qty": 1,
+				"transfer_qty": 1,
+				"basic_rate": value,
+				"basic_amount": value,
+				"gf_sales_order_item": line,
+				"gf_source_item_role": "Cut WIP",
+			},
+		)
+	for line, _cut_item, final_item, _value in lines:
+		se.append(
+			"items",
+			{
+				"item_code": final_item,
+				"t_warehouse": "Glass Final Goods - _TC",
+				"qty": 1,
+				"transfer_qty": 1,
+				"is_finished_item": 1,
+				"set_basic_rate_manually": 1,
+				"gf_sales_order_item": line,
+				"gf_source_item_role": "Final",
+			},
+		)
+	return se
 
 
 def _incoming_rows(se):
@@ -260,14 +319,27 @@ class TestProductionCosting(IntegrationTestCase):
 			temper=1,
 		)
 
-		with patch("frappe.get_doc") as get_doc:
+		with patch("frappe.get_doc") as get_doc, patch(
+			"glass_factory.glass_factory.selling_uom.ensure_item_area_conversion",
+			return_value=flt(1 / 0.96, 9),
+		), patch(
+			"glass_factory.glass_factory.selling_uom.require_selling_area_uom",
+			return_value="Square Meter",
+		):
 			get_doc.return_value = frappe._dict(
 				item_name=spec.final_item_code,
 				stock_uom="Nos",
 			)
 			row = map_spec_to_transaction_row(spec)
 
-		self.assertAlmostEqual(flt(row["rate"]), 960, places=2)
+		# Sold by area: 3 pieces of 0.96 m² = 2.88 m² at the spec's 1000 per m², never stock valuation.
+		self.assertEqual(row["uom"], "Square Meter")
+		self.assertEqual(row["stock_uom"], "Nos")
+		self.assertAlmostEqual(flt(row["qty"]), 2.88, places=6)
+		self.assertAlmostEqual(flt(row["stock_qty"]), 3, places=6)
+		self.assertAlmostEqual(flt(row["rate"]), 1000, places=2)
+		self.assertAlmostEqual(flt(row["amount"]), 2880, places=2)
+		self.assertAlmostEqual(flt(row["gf_rate_per_piece"]), 960, places=2)
 		self.assertAlmostEqual(flt(row["gf_selling_rate_per_m2"]), 1000, places=2)
 		self.assertNotAlmostEqual(flt(row["rate"]), 236.67, places=2)
 
@@ -286,6 +358,60 @@ class TestProductionCosting(IntegrationTestCase):
 			_patched_processing_build(job, settings=settings)
 
 		self.assertIn("Processing Cost Expense Account", str(ctx.exception))
+
+	def test_repack2_values_each_line_from_its_own_cut_wip(self):
+		se = _two_line_repack_entry(cut_wip_values=(50, 150))
+
+		value_processing_repack(se, strict=True)
+
+		first, second = _incoming_rows(se)
+		self.assertAlmostEqual(flt(first.basic_amount), 50, places=2)
+		self.assertAlmostEqual(flt(second.basic_amount), 150, places=2)
+		self.assertAlmostEqual(flt(first.basic_rate), 50, places=2)
+		self.assertAlmostEqual(flt(second.basic_rate), 150, places=2)
+
+	def test_repack2_rejects_finished_row_without_matching_cut_wip(self):
+		se = _two_line_repack_entry(cut_wip_values=(50, 150))
+		se.items[3].gf_sales_order_item = "SOI-OTHER"
+
+		with self.assertRaises(frappe.ValidationError):
+			value_processing_repack(se, strict=True)
+		# While ERPNext re-prices a posted entry the document is left as posted, never raised on.
+		value_processing_repack(se, strict=False)
+
+	def test_repack2_processing_cost_follows_the_line_that_incurred_it(self):
+		se = _two_line_repack_entry(cut_wip_values=(50, 150))
+		value_processing_repack(se, strict=True)
+		first, second = _incoming_rows(se)
+		first.gf_processing_cost, second.gf_processing_cost = 20, 38.8
+		se.append("additional_costs", {"description": "Glass Factory processing cost", "amount": 58.8, "base_amount": 58.8})
+
+		se.distribute_additional_costs()
+		se.update_valuation_rate()
+
+		self.assertAlmostEqual(flt(first.additional_cost), 20, places=2)
+		self.assertAlmostEqual(flt(second.additional_cost), 38.8, places=2)
+		self.assertAlmostEqual(flt(first.valuation_rate), 70, places=2)
+		self.assertAlmostEqual(flt(second.valuation_rate), 188.8, places=2)
+
+	def test_repack2_without_line_costs_uses_erpnext_allocation(self):
+		se = _two_line_repack_entry(cut_wip_values=(50, 150))
+		value_processing_repack(se, strict=True)
+		se.append("additional_costs", {"description": "Manual cost", "amount": 40, "base_amount": 40})
+
+		se.distribute_additional_costs()
+
+		first, second = _incoming_rows(se)
+		self.assertAlmostEqual(flt(first.additional_cost), 10, places=2)
+		self.assertAlmostEqual(flt(second.additional_cost), 30, places=2)
+
+	def test_split_value_adds_up_to_the_total(self):
+		rows = [frappe.new_doc("Stock Entry Detail") for _unused in range(3)]
+		for row in rows:
+			row.transfer_qty = 1
+		amounts = split_value(100, rows, [1, 1, 1])
+		self.assertAlmostEqual(sum(amounts), 100, places=6)
+		self.assertEqual(sorted(amounts), [33.33, 33.33, 33.34])
 
 	def test_stage_entrypoint_aliases(self):
 		self.assertIs(create_cutting_repack_stock_entry, build_cutting_repack)

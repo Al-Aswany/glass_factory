@@ -110,7 +110,7 @@ def build_traceability_row(
 
 	status = derive_production_stage(
 		sales_order=(so_row or {}).get("sales_order") or "",
-		qty_ordered=flt((so_row or {}).get("qty")),
+		qty_ordered=flt((so_row or {}).get("stock_qty") or (so_row or {}).get("qty")),
 		cut_qty=flt((so_row or {}).get("gf_cut_qty")),
 		processed_qty=flt((so_row or {}).get("gf_processed_qty")),
 		delivered_qty=flt((so_row or {}).get("gf_delivered_qty")),

@@ -14,29 +14,43 @@ class TestManualMVPContract(unittest.TestCase):
 		from glass_factory import hooks
 
 		self.assertIn(
-			"glass_factory.glass_factory.quotation_glass.sync_glass_pieces_to_items",
-			hooks.doc_events["Quotation"]["before_validate"],
-		)
-		self.assertIn(
 			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
 			hooks.doc_events["Quotation"]["before_validate"],
 		)
-		self.assertIn(
-			"glass_factory.glass_factory.quotation_glass.sync_glass_pieces_to_items",
-			hooks.doc_events["Sales Order"]["before_validate"],
+		self.assertNotIn(
+			"sync_glass_pieces_to_items",
+			str(hooks.doc_events["Quotation"]["before_validate"]),
 		)
 		self.assertIn(
 			"glass_factory.glass_factory.selling_validations.resolve_glass_items",
 			hooks.doc_events["Sales Order"]["before_validate"],
+		)
+		self.assertNotIn(
+			"sync_glass_pieces_to_items",
+			str(hooks.doc_events["Sales Order"]["before_validate"]),
 		)
 		self.assertEqual(
 			hooks.doc_events["Sales Order"]["before_submit"],
 			"glass_factory.glass_factory.selling_validations.validate_glass_selling_document",
 		)
-		self.assertEqual(
-			hooks.doc_events["Delivery Note"]["validate"],
+		self.assertIn(
 			"glass_factory.glass_factory.selling_validations.validate_delivery_note",
+			hooks.doc_events["Delivery Note"]["validate"],
 		)
+		self.assertEqual(
+			hooks.doc_events["Delivery Note"]["on_cancel"],
+			"glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
+		)
+		for doctype in ("Quotation", "Sales Order", "Delivery Note", "Sales Invoice"):
+			self.assertIn(
+				"glass_factory.glass_factory.selling_uom.snap_area_quantities",
+				str(hooks.doc_events[doctype]["before_validate"]),
+			)
+			self.assertIn(
+				"glass_factory.glass_factory.selling_uom.snap_stock_quantities",
+				str(hooks.doc_events[doctype]["validate"]),
+			)
+		self.assertEqual(hooks.before_install, "glass_factory.install.before_install")
 		self.assertEqual(
 			hooks.doc_events["Delivery Note"]["on_submit"],
 			"glass_factory.glass_factory.selling_validations.on_delivery_note_submit",
@@ -45,9 +59,24 @@ class TestManualMVPContract(unittest.TestCase):
 			hooks.doc_events["Stock Entry"]["before_validate"],
 			"glass_factory.glass_factory.stock_entry_hooks.prepare_glass_stock_entry",
 		)
-		self.assertEqual(
-			hooks.doc_events["Stock Entry"]["validate"],
+		self.assertIn(
 			"glass_factory.glass_factory.selling_validations.validate_stock_entry",
+			str(hooks.doc_events["Stock Entry"]["validate"]),
+		)
+		# Repack rates are derived inside ERPNext's own recalculation, not by a validate hook that
+		# runs once, so they also follow a later Landed Cost Voucher on the source receipt.
+		self.assertNotIn("apply_processing_repack_valuation", str(hooks.doc_events["Stock Entry"]))
+		self.assertEqual(
+			hooks.extend_doctype_class["Stock Entry"],
+			["glass_factory.glass_factory.stock_valuation.GlassStockEntryMixin"],
+		)
+		self.assertEqual(
+			hooks.doc_events["Stock Entry"]["before_cancel"],
+			"glass_factory.glass_factory.stock_entry_hooks.before_cancel_glass_stock_entry",
+		)
+		self.assertEqual(
+			hooks.doc_events["Stock Entry"]["on_cancel"],
+			"glass_factory.glass_factory.stock_entry_hooks.on_cancel_glass_stock_entry",
 		)
 
 	def test_job_doctypes_use_glass_naming_series(self):
@@ -93,6 +122,7 @@ class TestManualMVPContract(unittest.TestCase):
 				"gf_glass_item_role",
 				"gf_glass_section",
 				"gf_length_mm",
+				"gf_sheet_area_m2",
 				"gf_thickness_mm",
 				"gf_width_mm",
 			],
@@ -101,6 +131,7 @@ class TestManualMVPContract(unittest.TestCase):
 	def test_sales_order_and_stock_entry_trace_custom_fields(self):
 		self.assertTrue(frappe.db.exists("Custom Field", {"dt": "Sales Order", "fieldname": "glass_pieces"}))
 		self.assertTrue(frappe.db.exists("Custom Field", {"dt": "Stock Entry Detail", "fieldname": "gf_cutting_job"}))
+		self.assertTrue(frappe.db.exists("Custom Field", {"dt": "Stock Entry Detail", "fieldname": "gf_processing_cost"}))
 
 	def test_glass_factory_settings_has_allowed_types(self):
 		meta = frappe.get_meta("Glass Factory Settings")

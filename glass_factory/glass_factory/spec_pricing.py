@@ -334,6 +334,8 @@ def calculate_processing_amounts(spec) -> None:
         area_total = 0.0
         edge_total = 0.0
         unit_total = 0.0
+        cost_total = 0.0
+        currency = get_spec_currency(spec)
 
         for row in operation_rows:
             operation = row.get("operation") if hasattr(row, "get") else row.operation
@@ -353,8 +355,16 @@ def calculate_processing_amounts(spec) -> None:
             rate = flt(row.get("rate") if hasattr(row, "get") else row.rate)
             amount = flt(quantity * rate, 2)
 
+            # Internal cost on the same chargeable quantity. It comes only from the cost rate in
+            # Glass Factory Settings, so selling-rate overrides never touch it.
+            cost_rate = get_operation_cost_rate(operation, currency, pricing_basis)
+            cost_amount = flt(quantity * cost_rate, 2)
+            cost_total += cost_amount
+
             row.quantity = quantity
             row.amount = amount
+            row.cost_rate = cost_rate
+            row.cost_amount = cost_amount
 
             if pricing_basis == "Per Square Meter":
                 area_total += amount
@@ -366,8 +376,10 @@ def calculate_processing_amounts(spec) -> None:
         spec.area_processing_amount_per_piece = flt(area_total, 2)
         spec.edge_processing_amount_per_piece = flt(edge_total, 2)
         spec.unit_processing_amount_per_piece = flt(unit_total, 2)
+        spec.processing_cost_per_piece = flt(cost_total, 2)
     else:
         _calculate_processing_amounts_from_settings(spec)
+        spec.processing_cost_per_piece = calculate_internal_processing_cost(spec)
 
     spec.processing_amount_per_piece = flt(
         spec.area_processing_amount_per_piece
@@ -427,29 +439,54 @@ def calculate_final_pricing(spec) -> None:
     )
     spec.calculated_rate_per_m2 = flt(spec.calculated_amount_per_piece / area_m2, 6)
 
+    # The selling documents bill each piece at its area rounded to the Quantity precision and store the
+    # rate to the rate precision. Pricing the specification the same way keeps its rate, price per piece
+    # and amount identical to the Quotation, Sales Order, Delivery Note and Sales Invoice built from it.
+    from glass_factory.glass_factory.selling_uom import billing_area_m2
+
+    billed_area_m2 = billing_area_m2(area_m2)
+    rate_precision = cint(frappe.get_precision("Sales Order Item", "rate", currency=get_spec_currency(spec))) or 2
+    calculated_rate = flt(spec.calculated_rate_per_m2, rate_precision)
+
     manual_rate = flt(spec.get("manual_selling_rate_per_m2"))
     if manual_rate > 0:
-        spec.selling_rate_per_m2 = manual_rate
+        spec.selling_rate_per_m2 = flt(manual_rate, rate_precision)
         spec.price_override = 1
     else:
-        spec.selling_rate_per_m2 = spec.calculated_rate_per_m2
+        spec.selling_rate_per_m2 = calculated_rate
         spec.price_override = 0
 
-    spec.price_difference_per_m2 = flt(spec.selling_rate_per_m2 - spec.calculated_rate_per_m2, 6)
-    spec.rate_per_piece = flt(spec.selling_rate_per_m2 * area_m2, 2)
+    spec.price_difference_per_m2 = flt(spec.selling_rate_per_m2 - calculated_rate, 6)
+    spec.rate_per_piece = flt(spec.selling_rate_per_m2 * billed_area_m2, 2)
 
     qty = flt(spec.get("qty")) or 1
-    spec.amount = flt(spec.rate_per_piece * qty, 2)
+    spec.amount = flt(spec.selling_rate_per_m2 * billed_area_m2 * qty, 2)
+
+
+def calculate_internal_processing_cost(spec) -> float:
+    """Processing cost from internal cost rates when there are no operation rows to sum.
+
+    Selling-rate overrides are ignored. With operation rows, calculate_processing_amounts
+    sums the rows' cost_amount instead, so the rows and the margin always agree.
+    """
+    currency = get_spec_currency(spec)
+    total = 0.0
+    for operation, qty_field in OPERATION_QUANTITY_FIELD.items():
+        if not _is_operation_selected(spec, operation):
+            continue
+        basis = OPERATION_PRICING_BASIS.get(operation)
+        quantity = cint(spec.get(qty_field)) if basis == "Per Unit" else flt(spec.get(qty_field))
+        total += flt(quantity) * get_operation_cost_rate(operation, currency, basis)
+    return flt(total, 2)
 
 
 def calculate_margin_fields(spec) -> None:
-    """Compute gross profit and margin fields using buying cost vs selling price."""
+    """Compute gross profit from material cost plus internal processing cost."""
     area_m2 = flt(spec.get("area_m2"))
     qty = flt(spec.get("qty")) or 1
 
-    estimated_cost = flt(spec.get("raw_cost_per_finished_piece")) + flt(
-        spec.get("processing_amount_per_piece")
-    )
+    # processing_cost_per_piece is the sum of the operation rows' internal cost amounts.
+    estimated_cost = flt(spec.get("raw_cost_per_finished_piece")) + flt(spec.get("processing_cost_per_piece"))
     spec.estimated_cost_per_piece = flt(estimated_cost, 2)
 
     rate_per_piece = flt(spec.get("rate_per_piece"))
@@ -486,10 +523,46 @@ def collect_pricing_warnings(spec) -> list[str]:
             f"Warning: Some selected operations have zero rate: {', '.join(zero_rate_ops)}"
         )
 
+    zero_cost_ops = [
+        (row.get("operation") if hasattr(row, "get") else row.operation)
+        for row in (spec.get("operation_pricing") or [])
+        if flt(row.get("cost_rate") if hasattr(row, "get") else row.cost_rate) <= 0
+    ]
+    if zero_cost_ops:
+        warnings.append(
+            "Warning: No internal cost rate is configured for "
+            f"{', '.join(zero_cost_ops)}. Margin treats those operations as free."
+        )
+
     return warnings
 
 
+COST_RESULT_KEYS = (
+    "raw_sheet_rate_per_piece",
+    "raw_cost_per_m2",
+    "raw_cost_per_finished_piece",
+    "processing_cost_per_piece",
+    "estimated_cost_per_piece",
+    "gross_profit_per_piece",
+    "gross_profit_per_m2",
+    "gross_profit_percent",
+    "total_gross_profit",
+)
+
+
 def pricing_result(spec) -> dict:
+    """Pricing figures for the form. Internal costs are left out for users without cost access."""
+    from glass_factory.glass_factory.authorization import can_view_costs
+
+    result = _pricing_result(spec)
+    result["processing_cost_per_piece"] = flt(spec.get("processing_cost_per_piece"))
+    if not can_view_costs():
+        for key in COST_RESULT_KEYS:
+            result.pop(key, None)
+    return result
+
+
+def _pricing_result(spec) -> dict:
     return {
         "raw_sheet_rate_per_piece": flt(spec.get("raw_sheet_rate_per_piece")),
         "raw_cost_per_m2": flt(spec.get("raw_cost_per_m2")),

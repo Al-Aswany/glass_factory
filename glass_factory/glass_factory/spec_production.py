@@ -177,7 +177,12 @@ def build_cutting_piece_from_so_item(so, item, remaining: float) -> dict:
 	polish = bevel = temper = sandblast = laminate = 0
 	hole_count = special_hole_count = slot_count = special_slot_count = 0
 	selling_rate = flt(item.get("gf_selling_rate_per_m2"))
-	rate_per_piece = flt(item.get("gf_rate_per_piece") or item.get("rate"))
+	rate_per_piece = flt(item.get("gf_rate_per_piece"))
+	if not rate_per_piece:
+		rate_per_piece = flt(item.get("rate"))
+		if area_m2 and (item.get("uom") or "") != (item.get("stock_uom") or ""):
+			# The row rate is per m² when the row is sold by area; a piece rate needs the area.
+			rate_per_piece = flt(rate_per_piece * area_m2, 2)
 
 	if is_spec and glass_spec and frappe.db.exists("Glass Product Specification", glass_spec):
 		spec_fields = _spec_doc_fields(glass_spec)
@@ -246,7 +251,8 @@ def build_cutting_piece_from_so_item(so, item, remaining: float) -> dict:
 		"glass_specification": glass_spec,
 		"from_glass_specification": 1 if is_spec else 0,
 		"area_m2": area_m2,
-		"total_area_m2": total_area_m2 or flt(area_m2 * remaining, 6),
+		# Area of the pieces on this job (remaining is a piece count), not the whole Sales Order row.
+		"total_area_m2": flt(area_m2 * remaining, 6) if area_m2 else total_area_m2,
 		"polish": polish,
 		"bevel": bevel,
 		"temper": temper,

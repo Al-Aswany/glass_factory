@@ -229,6 +229,9 @@ def build_quotation_items_from_glass(
 	parent_doctype=None,
 ):
 	"""Build Item rows from glass pieces for client-side pre-save sync."""
+	from glass_factory.glass_factory.authorization import require_logged_in_glass_user
+
+	require_logged_in_glass_user()
 	for attempt in range(2):
 		try:
 			return _build_quotation_items_from_glass(

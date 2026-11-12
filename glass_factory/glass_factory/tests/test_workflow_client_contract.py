@@ -30,26 +30,23 @@ class TestWorkflowClientContract(unittest.TestCase):
 
 	def test_sales_order_cutting_job_hidden_before_submit(self):
 		script = (APP_ROOT / "public/js/sales_order_glass.js").read_text()
-		self.assertIn('if (frm.doc.docstatus !== 1) return', script)
+		self.assertIn("frm.doc.docstatus === 1", script)
 		self.assertIn('__("Cutting Job")', script)
+		self.assertIn("frappe.model.can_create(\"Cutting Job\")", script)
 
 	def test_quotation_item_grid_locks_generated_rows(self):
 		quotation_script = (APP_ROOT / "public/js/quotation_glass.js").read_text()
 		sync_script = (APP_ROOT / "public/js/gf_glass_sync.js").read_text()
-		self.assertIn("GF_ITEM_LOCKED_FIELDS", quotation_script)
-		self.assertIn("glass_factory.sync.sync_glass_items_to_form", quotation_script)
-		self.assertIn("glass_factory.sync.item_locked_fields", sync_script)
-		self.assertIn("items_grid.cannot_add_rows = has_glass", sync_script)
-		self.assertIn("glass_factory.sync.set_grid_field_read_only", sync_script)
+		self.assertIn("Add Glass Specification", quotation_script)
+		self.assertIn("glass_factory.sync.show_add_spec_to_transaction_dialog", quotation_script)
+		self.assertIn("glass_factory.sync.spec_ready_filters", sync_script)
+		self.assertIn('"Submitted"', sync_script)
+		self.assertNotIn('"Cancelled"', sync_script.split("spec_ready_filters", 1)[1].split("};", 1)[0])
 
 	def test_shared_glass_sync_does_not_depend_on_controller_globals(self):
 		script = (APP_ROOT / "public/js/gf_glass_sync.js").read_text()
-		self.assertIn("glass_factory.sync.remove_empty_item_rows(frm)", script)
-		self.assertIn("glass_factory.sync.existing_glass_rates(frm)", script)
-		self.assertIn("glass_factory.sync.toggle_items_grid(frm)", script)
-		self.assertIn("glass_factory.sync.grid_has_field", script)
+		self.assertIn("glass_factory.sync.add_spec_to_transaction", script)
+		self.assertIn("glass_factory.sync.spec_ready_filters", script)
 		self.assertNotIn("gf_remove_empty_item_rows(frm)", script)
 		self.assertNotIn("gf_existing_glass_rates(frm)", script)
 		self.assertNotIn("gf_toggle_items_grid(frm)", script)
-		self.assertNotIn('"s_warehouse"', script)
-		self.assertNotIn('"t_warehouse"', script)

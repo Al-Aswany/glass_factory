@@ -62,3 +62,9 @@ def validate_glass_item(doc, method=None):
 
 	if role in GLASS_ROLES_REQUIRING_CODE:
 		validate_glass_type(doc.gf_base_glass_type, context=f"Item {item_code}")
+
+	if role in ("Raw Sheet", "Final"):
+		from glass_factory.glass_factory.selling_uom import ensure_area_uom_conversion
+
+		# Square Meter conversion from the Item's own dimensions: pieces per m².
+		ensure_area_uom_conversion(doc)

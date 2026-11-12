@@ -9,6 +9,7 @@
   "pricing_basis",
   "rate",
   "cost_rate",
+  "cost_rate_set",
   "enabled"
  ],
  "fields": [
@@ -47,12 +48,20 @@
   },
   {
    "default": "0",
-   "description": "Internal cost rate used for margin calculations.",
+   "description": "Internal cost rate used for margin and, when capitalization is on, for finished-goods valuation.",
    "fieldname": "cost_rate",
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Default Cost Rate",
    "options": "currency"
+  },
+  {
+   "default": "0",
+   "description": "Tick when this cost rate was entered on purpose, including an intentional zero. Leave unticked when the zero is only the seeded default.",
+   "fieldname": "cost_rate_set",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Cost Rate Set"
   },
   {
    "default": "1",
@@ -63,7 +72,7 @@
   }
  ],
  "istable": 1,
- "modified": "2026-06-28 18:00:00.000000",
+ "modified": "2026-11-12 12:30:00.000000",
  "modified_by": "Administrator",
  "module": "Glass Factory",
  "name": "Glass Operation Rate",

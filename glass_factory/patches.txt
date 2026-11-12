@@ -28,4 +28,5 @@ glass_factory.patches.v0_0.fix_missing_spec_custom_fields
 glass_factory.patches.v0_0.setup_raw_glass_selling_per_m2
 glass_factory.patches.v0_0.setup_design_attachment_item_field
 glass_factory.patches.v0_0.setup_glass_stock_entry_types
+glass_factory.patches.v0_0.mark_specified_operation_cost_rates
 # Patches added in this section will be executed after doctypes are migrated

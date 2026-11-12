@@ -16,6 +16,9 @@ from glass_factory.glass_factory.spec_pricing import get_operation_cost_rate
 
 
 def execute(filters=None):
+	from glass_factory.glass_factory.authorization import require_cost_access
+
+	require_cost_access()
 	filters = filters or {}
 	columns = _columns()
 	data = _data(filters)
@@ -73,6 +76,8 @@ def _data(filters: Dict) -> List[Dict]:
 			Op.quantity,
 			Op.rate,
 			Op.amount,
+			Op.cost_rate,
+			Op.cost_amount,
 		)
 		.where(Spec.docstatus < 2)
 	)
@@ -95,8 +100,13 @@ def build_operation_cost_row(row: Dict) -> Dict:
 	"""Map a joined spec/operation-pricing row to report output."""
 	currency = row.get("currency") or ""
 	qty = flt(row.get("quantity"))
-	cost_rate = get_operation_cost_rate(row["operation"], currency, row["pricing_basis"])
-	cost_amount = flt(cost_rate * qty, 2)
+	# Prefer the internal cost stored on the specification row so the report, the form, and the
+	# margin agree. Rows priced before cost columns existed fall back to the current cost rate.
+	cost_rate = flt(row.get("cost_rate"))
+	cost_amount = flt(row.get("cost_amount"))
+	if not cost_rate and not cost_amount:
+		cost_rate = get_operation_cost_rate(row["operation"], currency, row["pricing_basis"])
+		cost_amount = flt(cost_rate * qty, 2)
 	selling_rate = flt(row.get("rate"))
 	selling_amount = flt(row.get("amount")) or flt(selling_rate * qty, 2)
 	return {

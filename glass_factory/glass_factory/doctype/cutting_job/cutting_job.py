@@ -17,7 +17,22 @@ from glass_factory.glass_factory.spec_production import (
 	resolve_processing_job_customer,
 	sales_order_has_glass_production_items,
 )
+from glass_factory.glass_factory.authorization import (
+	require_doc_permission,
+	require_doctype_permission,
+	require_stock_movement_authority,
+)
+from glass_factory.glass_factory.selling_uom import row_pieces, sales_order_item_pieces
 from glass_factory.glass_factory.settings_validation import get_raw_warehouse
+from glass_factory.glass_factory.stock_movements import (
+	CUTTING_FLOW,
+	assert_job_cancel_allowed,
+	clear_cancelled_link,
+	guard_linked_movement,
+	lock_job,
+	mark_posted_after_submit,
+	movement_docstatus,
+)
 from glass_factory.glass_factory.stock_posting import build_cutting_repack
 
 
@@ -28,6 +43,9 @@ class CuttingJob(Document):
 		self._validate_assignment_limits()
 		self._validate_source_sheets()
 
+	def before_cancel(self):
+		assert_job_cancel_allowed(self)
+
 	def _save_after_submit(self):
 		if self.docstatus == 1:
 			self.flags.ignore_validate_update_after_submit = True
@@ -36,6 +54,7 @@ class CuttingJob(Document):
 	@frappe.whitelist()
 	def pull_from_sales_orders(self):
 		"""Populate pieces and source sheets from linked submitted Sales Orders."""
+		require_doc_permission(self, "write")
 		self._populate_from_sales_orders()
 		self.save(ignore_permissions=True)
 		return {
@@ -56,7 +75,8 @@ class CuttingJob(Document):
 			for item in so.items:
 				if not is_glass_production_row(item):
 					continue
-				remaining = flt(item.qty) - self._assigned_qty(item.name)
+				# Cutting assignments are piece counts; the row quantity can be m².
+				remaining = flt(row_pieces(item) - self._assigned_qty(item.name), 6)
 				if remaining <= 0:
 					continue
 				self.append("pieces", build_cutting_piece_from_so_item(so, item, remaining))
@@ -91,38 +111,69 @@ class CuttingJob(Document):
 		if self.docstatus != 1:
 			frappe.throw("Submit the Cutting Job before creating a stock movement.")
 		self._validate_source_sheet_batches()
-		if self.linked_stock_entry:
-			return {"stock_entry": self.linked_stock_entry}
-		se = build_cutting_repack(self)
+		require_stock_movement_authority(self, CUTTING_FLOW)
+		locked = lock_job(self.doctype, self.name)
+		linked = guard_linked_movement(locked, flow=CUTTING_FLOW)
+		if linked:
+			return {"stock_entry": linked, "message": "Existing cutting stock movement kept."}
+		se = build_cutting_repack(locked)
 		se.insert(ignore_permissions=True)
-		self.linked_stock_entry = se.name
-		self.status = "Ready for Cutting"
-		self._save_after_submit()
+		locked.db_set("linked_stock_entry", se.name)
+		locked.db_set("status", "Ready for Cutting")
 		message = "Draft cutting stock movement created."
-		if self.get("optimization_status") == "Imported" and self.get("optimization_used_sheets"):
+		if locked.get("optimization_status") == "Imported" and locked.get("optimization_used_sheets"):
 			message = "Draft cutting stock movement created from imported optimization result."
+		self.reload()  # the job was changed through the locked copy; hand the caller the committed state
 		return {"message": message, "stock_entry": se.name}
 
 	@frappe.whitelist()
 	def submit_repack_stock_entry(self):
-		if not self.linked_stock_entry:
+		if self.docstatus != 1:
+			frappe.throw("Submit the Cutting Job before posting a stock movement.")
+		require_stock_movement_authority(self, CUTTING_FLOW)
+		locked = lock_job(self.doctype, self.name)
+		if not locked.linked_stock_entry:
 			self.create_repack_stock_entry()
-		se = frappe.get_doc("Stock Entry", self.linked_stock_entry)
+			locked = lock_job(self.doctype, self.name)
+		linked = guard_linked_movement(locked, flow=CUTTING_FLOW)
+		se = frappe.get_doc("Stock Entry", linked)
 		if se.docstatus == 0:
 			se.submit()
-		self.status = "Cut Stock Posted"
-		for piece in self.pieces:
-			self._update_so_item(piece.sales_order_item, {
-				"gf_cutting_job": self.name,
-				"gf_cut_qty": flt(piece.get("qty_cut") or piece.get("qty_required")),
-			})
-		self._save_after_submit()
+			se.reload()
+		if se.docstatus != 1:
+			frappe.throw(f"Stock Entry {se.name} is not submitted, so the Cutting Job was not marked as posted.")
+		for piece in locked.get("pieces") or []:
+			if piece.sales_order_item:
+				self._update_so_item(piece.sales_order_item, {"gf_cutting_job": locked.name})
+		mark_posted_after_submit(locked, se.name)
+		self.reload()  # the job was changed through the locked copy; hand the caller the committed state
 		return {"message": "Cutting stock movement submitted.", "stock_entry": se.name}
+
+	@frappe.whitelist()
+	def recover_cancelled_stock_movement(self):
+		"""Clear a cancelled movement link. Does not create a replacement Stock Entry."""
+		cancelled_name = clear_cancelled_link(self, flow=CUTTING_FLOW)
+		return {
+			"message": (
+				f"Cancelled Stock Entry {cancelled_name} was unlinked. "
+				"Create a new cutting stock movement when you are ready to post again."
+			),
+			"stock_entry": cancelled_name,
+		}
 
 	@frappe.whitelist()
 	def make_processing_job(self):
 		if self.status not in ("Cut Stock Posted", "Processing Started", "Completed"):
 			frappe.throw("Submit the cutting stock movement before creating a Glass Processing Job.")
+		if movement_docstatus(self.linked_stock_entry) != 1:
+			frappe.throw("The cutting stock movement must be submitted before creating a Glass Processing Job.")
+		require_doc_permission(self, "write")
+		require_doctype_permission(
+			"Glass Processing Job",
+			"create",
+			company=self.company,
+			message="You do not have permission to create a Glass Processing Job.",
+		)
 		existing = self.get("linked_processing_job") or frappe.db.get_value(
 			"Glass Processing Job",
 			{"cutting_job": self.name, "docstatus": ["!=", 2]},
@@ -156,9 +207,16 @@ class CuttingJob(Document):
 	def start_processing(self):
 		if self.docstatus != 1:
 			frappe.throw("Submit the Cutting Job before starting processing.")
+		require_doc_permission(self, "write")
 		if not self.linked_stock_entry:
 			frappe.throw("Submit the cutting stock movement before starting processing.")
-		if frappe.db.get_value("Stock Entry", self.linked_stock_entry, "docstatus") != 1:
+		stock_status = movement_docstatus(self.linked_stock_entry)
+		if stock_status == 2:
+			frappe.throw(
+				f"Stock Entry {self.linked_stock_entry} is cancelled. "
+				"Recover the cancelled movement and submit a new cutting stock movement before starting processing."
+			)
+		if stock_status != 1:
 			frappe.throw("Submit the cutting stock movement before starting processing.")
 		result = self.make_processing_job()
 		processing_job = result.get("processing_job")
@@ -184,6 +242,7 @@ class CuttingJob(Document):
 			processing_status = frappe.db.get_value("Glass Processing Job", self.linked_processing_job, "status")
 			if processing_status != "Completed":
 				frappe.throw("Complete the Glass Processing Job before completing the Cutting Job.")
+		require_doc_permission(self, "write")
 		self.status = "Completed"
 		self._save_after_submit()
 		return {"message": "Cutting Job completed."}
@@ -227,7 +286,7 @@ class CuttingJob(Document):
 			totals[row.sales_order_item] = totals.get(row.sales_order_item, 0) + assigned
 
 		for so_item_name, assigned_total in totals.items():
-			ordered_qty = flt(frappe.db.get_value("Sales Order Item", so_item_name, "qty"))
+			ordered_qty = sales_order_item_pieces(so_item_name)
 			other_jobs_qty = self._assigned_qty(so_item_name)
 			if other_jobs_qty + assigned_total > ordered_qty:
 				frappe.throw(
@@ -263,6 +322,7 @@ class CuttingJob(Document):
 		return any(piece_has_processing(piece) for piece in self.get("pieces") or [])
 
 	def _assigned_qty(self, so_item_name):
+		"""Pieces already assigned to other live Cutting Jobs for this Sales Order row."""
 		filters = {
 			"sales_order_item": so_item_name,
 			"parenttype": "Cutting Job",
@@ -272,9 +332,18 @@ class CuttingJob(Document):
 		rows = frappe.get_all(
 			"Cutting Job Piece",
 			filters=filters,
-			fields=["qty_assigned", "qty_required"],
+			fields=["parent", "qty_assigned", "qty_required"],
 		)
-		return sum(flt(row.qty_assigned or row.qty_required) for row in rows)
+		if not rows:
+			return 0
+		cancelled = set(
+			frappe.get_all(
+				"Cutting Job",
+				filters={"name": ["in", list({row.parent for row in rows})], "docstatus": 2},
+				pluck="name",
+			)
+		)
+		return sum(flt(row.qty_assigned or row.qty_required) for row in rows if row.parent not in cancelled)
 
 	def _update_so_item(self, row_name, values):
 		for fieldname, value in values.items():
@@ -282,12 +351,14 @@ class CuttingJob(Document):
 
 	@frappe.whitelist()
 	def generate_cop_files(self):
+		require_doc_permission(self, "write")
 		if not _cop_enabled():
 			frappe.throw("COP is disabled for Phase 0 manual flow.")
 		frappe.throw("COP generation is dormant in Phase 0.")
 
 	@frappe.whitelist()
 	def process_result(self):
+		require_doc_permission(self, "write")
 		if not _cop_enabled():
 			frappe.throw("COP is disabled for Phase 0 manual flow.")
 		frappe.throw("COP result processing is dormant in Phase 0.")
@@ -307,10 +378,18 @@ def _cop_enabled():
 def make_cutting_job(source_name, target_doc=None):
 	"""Create a Cutting Job draft linked to a submitted Sales Order."""
 	source = frappe.get_doc("Sales Order", source_name)
+	if not frappe.has_permission("Sales Order", "read", doc=source):
+		frappe.throw("You do not have permission to read this Sales Order.", frappe.PermissionError)
 	if source.docstatus != 1:
 		frappe.throw("Sales Order must be submitted before creating a Cutting Job.")
 	if not sales_order_has_glass_production_items(source):
 		frappe.throw("Sales Order has no glass items.")
+	require_doctype_permission(
+		"Cutting Job",
+		"create",
+		company=source.company,
+		message="You do not have permission to create a Cutting Job.",
+	)
 
 	if target_doc:
 		job = frappe.get_doc(frappe.parse_json(target_doc))
